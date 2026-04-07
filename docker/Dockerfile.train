@@ -1,0 +1,86 @@
+# Multi-stage build for cyberloop RL training container.
+#
+# Stage 1: Compile decker_pyenv (Rust + PyO3) via maturin.
+# Stage 2: Slim Python runtime with torch, numpy, and the compiled wheel.
+#
+# Build from the cyberloop root:
+#   docker build -f docker/Dockerfile.train -t cyberloop-train .
+#
+# Run:
+#   docker run --gpus all --shm-size=8g --cpus=10 \
+#     -v $(pwd)/runs:/runs \
+#     cyberloop-train \
+#     --subclass dueling --combat-timesteps 20000000
+
+# ---------------------------------------------------------------------------
+# Stage 1: Build decker_pyenv
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl build-essential pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install maturin.
+RUN pip install --no-cache-dir maturin
+
+# Copy Rust workspace (only crates needed for pyenv build).
+COPY Cargo.toml /build/
+COPY crates/engine/ /build/crates/engine/
+COPY crates/content/ /build/crates/content/
+COPY crates/gauntlet/ /build/crates/gauntlet/
+COPY crates/pyenv/ /build/crates/pyenv/
+
+# Build the wheel.
+WORKDIR /build/crates/pyenv
+RUN maturin build --release --interpreter python3.12 -o /build/wheels/
+
+# ---------------------------------------------------------------------------
+# Stage 2: Runtime (NVIDIA CUDA base for GPU training)
+# ---------------------------------------------------------------------------
+FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python 3.12 on the CUDA base image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common curl && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 python3.12-venv python3.12-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Make python3.12 the default and bootstrap pip via get-pip.py.
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 && \
+    curl -sS https://bootstrap.pypa.io/get-pip.py | python
+
+# Install the compiled wheel + Python deps.
+COPY --from=builder /build/wheels/*.whl /tmp/wheels/
+RUN python -m pip install --no-cache-dir /tmp/wheels/*.whl && rm -rf /tmp/wheels
+
+RUN python -m pip install --no-cache-dir numpy matplotlib pandas
+RUN python -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu124
+
+# Prevent PyTorch intra-op thread oversubscription when using
+# multiple actor processes. Without this, 4+ actors cause
+# catastrophic slowdown on WSL2/Docker Desktop.
+ENV OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+
+# Copy training scripts.
+COPY scripts/train_impala.py /app/scripts/train_impala.py
+COPY scripts/eval_common.py /app/scripts/eval_common.py
+COPY scripts/numpy_eval.py /app/scripts/numpy_eval.py
+COPY scripts/model.py /app/scripts/model.py
+COPY scripts/strategy.py /app/scripts/strategy.py
+COPY scripts/decker_env.py /app/scripts/decker_env.py
+
+WORKDIR /app
+
+# Default: run training. Override args at docker run time.
+ENTRYPOINT ["python", "scripts/train_impala.py"]

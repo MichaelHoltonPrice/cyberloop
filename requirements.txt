@@ -1,0 +1,7 @@
+gymnasium
+numpy
+maturin
+pandas
+matplotlib
+torch
+claude-agent-sdk

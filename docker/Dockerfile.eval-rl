@@ -1,0 +1,70 @@
+# Multi-stage build for cyberloop RL evaluation container.
+#
+# Stage 1: Compile decker_pyenv (Rust + PyO3) via maturin.
+# Stage 2: Slim Python runtime with torch (CPU) and numpy.
+#
+# Build from the cyberloop root:
+#   docker build -f docker/Dockerfile.eval-rl -t cyberloop-eval-rl .
+#
+# Run:
+#   docker run --rm \
+#     -v /path/to/checkpoint.pt:/input/checkpoint.pt:ro \
+#     cyberloop-eval-rl \
+#     --checkpoint /input/checkpoint.pt --subclass dueling --episodes 20
+
+# ---------------------------------------------------------------------------
+# Stage 1: Build decker_pyenv
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl build-essential pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install maturin.
+RUN pip install --no-cache-dir maturin
+
+# Copy Rust workspace (only crates needed for pyenv build).
+COPY Cargo.toml /build/
+COPY crates/engine/ /build/crates/engine/
+COPY crates/content/ /build/crates/content/
+COPY crates/gauntlet/ /build/crates/gauntlet/
+COPY crates/pyenv/ /build/crates/pyenv/
+
+# Build the wheel.
+WORKDIR /build/crates/pyenv
+RUN maturin build --release --interpreter python3.12 -o /build/wheels/
+
+# ---------------------------------------------------------------------------
+# Stage 2: Runtime (CPU-only, no CUDA needed for inference)
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim
+
+# Install the compiled wheel + Python deps.
+COPY --from=builder /build/wheels/*.whl /tmp/wheels/
+RUN pip install --no-cache-dir /tmp/wheels/*.whl && rm -rf /tmp/wheels
+
+# CPU-only torch (much smaller than CUDA version).
+RUN pip install --no-cache-dir numpy torch --index-url https://download.pytorch.org/whl/cpu
+
+# Prevent PyTorch intra-op thread oversubscription when using
+# multiple worker processes (ProcessPoolExecutor). Without this,
+# 4+ workers cause catastrophic slowdown on WSL2/Docker Desktop.
+ENV OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+
+# Copy eval and model scripts.
+COPY scripts/eval_common.py /app/scripts/eval_common.py
+COPY scripts/eval_checkpoint.py /app/scripts/eval_checkpoint.py
+COPY scripts/numpy_eval.py /app/scripts/numpy_eval.py
+COPY scripts/model.py /app/scripts/model.py
+COPY scripts/strategy.py /app/scripts/strategy.py
+
+WORKDIR /app/scripts
+
+# Default: run evaluation. Override args at docker run time.
+ENTRYPOINT ["python", "eval_checkpoint.py"]
