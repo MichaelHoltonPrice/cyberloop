@@ -1,0 +1,33 @@
+artifacts:
+  - name: game_engine
+    kind: git
+    repo: "."
+    path: crates
+  - name: checkpoint
+    kind: copy
+  - name: score
+    kind: copy
+
+blocks:
+  - name: train
+    image: cyberloop-train:latest
+    gpus: true
+    shm_size: "8g"
+    inputs:
+      - name: game_engine
+        container_path: /input/engine
+      - name: checkpoint
+        container_path: /input/checkpoint
+        optional: true
+    outputs:
+      - name: checkpoint
+        container_path: /output
+
+  - name: eval
+    image: cyberloop-eval-rl:latest
+    inputs:
+      - name: checkpoint
+        container_path: /input/checkpoint
+    outputs:
+      - name: score
+        container_path: /output

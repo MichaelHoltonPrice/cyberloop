@@ -10,5 +10,7 @@ runs/
 client/assets/
 *.pt
 .env
+OVERNIGHT_PLAN.md
+OVERNIGHT_RESULTS.md
 .claude/worktrees/
 .claude/settings.local.json
