@@ -1,0 +1,21 @@
+[package]
+name = "decker-pyenv"
+description = "Python bindings for the Decker gauntlet engine (PyO3)."
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = []
+op-test-card = ["decker-content/op-test-card"]
+
+[lib]
+name = "decker_pyenv"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+decker-engine = { path = "../engine" }
+decker-content = { path = "../content" }
+decker-gauntlet = { path = "../gauntlet" }
+pyo3 = { version = "0.23", features = ["extension-module"] }
+numpy = "0.23"
+serde_json.workspace = true

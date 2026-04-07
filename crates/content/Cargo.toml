@@ -1,0 +1,14 @@
+[package]
+name = "decker-content"
+description = "Card, enemy, and encounter definitions for the Decker engine."
+version.workspace = true
+edition.workspace = true
+
+[features]
+default = []
+op-test-card = []
+
+[dependencies]
+decker-engine = { path = "../engine" }
+serde_json.workspace = true
+sha2 = { workspace = true }

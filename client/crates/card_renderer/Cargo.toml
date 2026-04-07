@@ -1,0 +1,9 @@
+[package]
+name = "decker-card-renderer"
+description = "Reusable card rendering service for Decker."
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { workspace = true }
+decker-engine = { path = "../../../crates/engine" }

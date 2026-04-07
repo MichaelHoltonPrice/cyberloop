@@ -1,0 +1,19 @@
+[package]
+name = "decker-client"
+description = "Decker client for cyberloop — stripped-down gauntlet UI."
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "decker"
+path = "src/main.rs"
+
+[dependencies]
+bevy = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+rand = { workspace = true }
+serde_json = { workspace = true }
+decker-engine = { path = "../../../crates/engine" }
+decker-content = { path = "../../../crates/content" }
+decker-gauntlet = { path = "../../../crates/gauntlet" }
+decker-card-renderer = { path = "../card_renderer" }
