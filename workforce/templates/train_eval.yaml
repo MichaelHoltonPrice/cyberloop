@@ -11,8 +11,7 @@ artifacts:
 blocks:
   - name: train
     image: cyberloop-train:latest
-    gpus: true
-    shm_size: "8g"
+    docker_args: ["--gpus", "all", "--shm-size", "8g"]
     inputs:
       - name: game_engine
         container_path: /input/engine
