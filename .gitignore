@@ -1,4 +1,4 @@
-/target
+**/target
 *.pyc
 __pycache__/
 *.egg-info/
@@ -7,5 +7,8 @@ build/
 .pytest_cache/
 runs/
 .venv/
+client/assets/
+*.pt
+.env
 .claude/worktrees/
 .claude/settings.local.json
