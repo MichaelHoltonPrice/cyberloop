@@ -12,6 +12,6 @@ client/assets/
 .env
 OVERNIGHT_PLAN.md
 OVERNIGHT_RESULTS.md
-workforce/workspaces/
+foundry/workspaces/
 .claude/worktrees/
 .claude/settings.local.json
