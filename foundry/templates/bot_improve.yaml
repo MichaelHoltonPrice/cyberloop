@@ -1,0 +1,36 @@
+artifacts:
+  - name: game_engine
+    kind: git
+    repo: "."
+    path: crates
+  - name: bot
+    kind: copy
+  - name: summary
+    kind: copy
+  - name: score
+    kind: copy
+
+blocks:
+  - name: improve
+    image: flywheel-claude:latest
+    inputs:
+      - name: game_engine
+        container_path: /source
+      - name: bot
+        container_path: /input/bot
+        optional: true
+      - name: summary
+        container_path: /input/summary
+        optional: true
+    outputs:
+      - name: bot
+      - name: summary
+
+  - name: eval_bot
+    image: cyberloop-eval-bot:latest
+    inputs:
+      - name: bot
+        container_path: /input/bot
+    outputs:
+      - name: score
+        container_path: /output
