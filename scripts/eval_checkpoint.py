@@ -34,6 +34,8 @@ _scripts_dir = str(Path(__file__).resolve().parent)
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
 
+from eval_io import print_summary, write_scores
+
 
 def write_manifest(output_dir, artifacts):
     """Write output_manifest.json declaring produced artifacts."""
@@ -132,7 +134,6 @@ def main():
         stats = _run_torch(args, dims, output_dir)
 
     # Write scores to file.
-    from eval_io import write_scores
     write_scores(output_dir, stats)
 
     # Write manifest.
@@ -146,7 +147,6 @@ def main():
     ])
 
     # Print summary to stdout (per-episode fights_won stays in scores.json only).
-    from eval_io import print_summary
     print_summary(stats)
 
 

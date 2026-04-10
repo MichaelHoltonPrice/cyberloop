@@ -60,6 +60,7 @@ ENV OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 # Copy eval and model scripts.
 COPY scripts/eval_common.py /app/scripts/eval_common.py
 COPY scripts/eval_checkpoint.py /app/scripts/eval_checkpoint.py
+COPY scripts/eval_io.py /app/scripts/eval_io.py
 COPY scripts/numpy_eval.py /app/scripts/numpy_eval.py
 COPY scripts/model.py /app/scripts/model.py
 COPY scripts/strategy.py /app/scripts/strategy.py

@@ -40,6 +40,7 @@ def main():
     parser.add_argument("--subclass", required=True)
     parser.add_argument("--episodes", type=int, default=200)
     parser.add_argument("--race", default="human")
+    parser.add_argument("--background", default="soldier")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--n-workers", type=int, default=None,
                         help="Parallel workers (default: CPU count)")
@@ -56,6 +57,7 @@ def main():
         episodes=args.episodes,
         seed=args.seed,
         race=args.race,
+        background=args.background,
         n_workers=args.n_workers,
         verbose=True,
     )

@@ -89,6 +89,9 @@ def _init_worker(bot_path, subclass, race, background):
         spec = importlib.util.spec_from_file_location("custom_bot", bot_path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        if not hasattr(mod, "player_fn"):
+            raise AttributeError(
+                f"Bot module {bot_path!r} does not define player_fn")
         _worker_player_fn = mod.player_fn
     else:
         import random
