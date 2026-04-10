@@ -1,0 +1,21 @@
+artifacts:
+  - name: game_engine
+    kind: git
+    repo: "."
+    path: crates
+  - name: bot
+    kind: copy
+  - name: score
+    kind: copy
+
+blocks:
+  - name: eval_bot
+    image: cyberloop-eval-bot:latest
+    inputs:
+      - name: game_engine
+        container_path: /input/engine
+      - name: bot
+        container_path: /input/bot
+    outputs:
+      - name: score
+        container_path: /output

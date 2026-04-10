@@ -132,8 +132,8 @@ def main():
         stats = _run_torch(args, dims, output_dir)
 
     # Write scores to file.
-    scores_path = output_dir / "scores.json"
-    scores_path.write_text(json.dumps(stats, indent=2))
+    from eval_io import write_scores
+    write_scores(output_dir, stats)
 
     # Write manifest.
     write_manifest(output_dir, [
@@ -146,8 +146,8 @@ def main():
     ])
 
     # Print summary to stdout (per-episode fights_won stays in scores.json only).
-    summary = {k: v for k, v in stats.items() if k != "fights_won"}
-    print(json.dumps(summary))
+    from eval_io import print_summary
+    print_summary(stats)
 
 
 if __name__ == "__main__":

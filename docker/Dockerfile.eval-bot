@@ -1,0 +1,62 @@
+# Multi-stage build for cyberloop bot evaluation container.
+#
+# Evaluates a bot.py (heuristic/scripted logic) by running gauntlet
+# episodes. Lighter than the RL eval container — no torch needed.
+#
+# Build from the cyberloop root:
+#   docker build -f docker/Dockerfile.eval-bot -t cyberloop-eval-bot .
+#
+# Run:
+#   docker run --rm \
+#     -v /path/to/bot_dir:/input/bot:ro \
+#     -v /path/to/output:/output \
+#     cyberloop-eval-bot \
+#     --bot /input/bot/bot.py --subclass dueling --episodes 200
+
+# ---------------------------------------------------------------------------
+# Stage 1: Build decker_pyenv
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl build-essential pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install maturin.
+RUN pip install --no-cache-dir maturin
+
+# Copy Rust workspace (only crates needed for pyenv build).
+COPY Cargo.toml /build/
+COPY crates/engine/ /build/crates/engine/
+COPY crates/content/ /build/crates/content/
+COPY crates/gauntlet/ /build/crates/gauntlet/
+COPY crates/pyenv/ /build/crates/pyenv/
+
+# Build the wheel.
+WORKDIR /build/crates/pyenv
+RUN maturin build --release --interpreter python3.12 -o /build/wheels/
+
+# ---------------------------------------------------------------------------
+# Stage 2: Runtime (CPU-only, lightweight)
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim
+
+# Install the compiled wheel + numpy.
+COPY --from=builder /build/wheels/*.whl /tmp/wheels/
+RUN pip install --no-cache-dir /tmp/wheels/*.whl && rm -rf /tmp/wheels
+RUN pip install --no-cache-dir numpy
+
+# Copy bot eval scripts.
+COPY scripts/eval_bot.py /app/scripts/eval_bot.py
+COPY scripts/play_bot.py /app/scripts/play_bot.py
+COPY scripts/action_parser.py /app/scripts/action_parser.py
+COPY scripts/eval_io.py /app/scripts/eval_io.py
+
+WORKDIR /app/scripts
+
+ENTRYPOINT ["python", "eval_bot.py"]
