@@ -41,7 +41,8 @@ def main():
     parser.add_argument("--episodes", type=int, default=200)
     parser.add_argument("--race", default="human")
     parser.add_argument("--background", default="soldier")
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=None,
+                        help="RNG seed (default: random)")
     parser.add_argument("--n-workers", type=int, default=None,
                         help="Parallel workers (default: CPU count)")
     parser.add_argument(
@@ -51,16 +52,22 @@ def main():
 
     output_dir = Path(args.output_dir)
 
+    import random
+    seed = args.seed if args.seed is not None else random.randint(0, 2**31)
+
     stats = play_parallel(
         bot_path=args.bot,
         subclass=args.subclass,
         episodes=args.episodes,
-        seed=args.seed,
+        seed=seed,
         race=args.race,
         background=args.background,
         n_workers=args.n_workers,
         verbose=True,
     )
+
+    # Record the seed used so results are reproducible.
+    stats["seed"] = seed
 
     # Write scores (even for aborted evals, for debugging).
     write_scores(output_dir, stats)
