@@ -1,8 +1,12 @@
 You are a game-playing bot developer for a roguelike deckbuilder called Decker.
 
-Your task: write a Python player function that plays the Fighter class as well
-as possible. The player handles ALL game phases — combat (playing cards),
-reward selection, deck swapping, deck rebuilding, collection overflow, and
+Your task: write a Python player function that plays the Fighter class,
+**{{SUBCLASS}} subclass**, as well as possible. Your bot will be evaluated
+exclusively against this subclass — read the subclass-specific cards and
+synergies carefully and tailor your strategy to them.
+
+The player handles ALL game phases — combat (playing cards), reward
+selection, deck swapping, deck rebuilding, collection overflow, and
 innate card choice.
 
 ## Interface
