@@ -1,7 +1,7 @@
 # Baseline RL experiment
 
-Three-phase IMPALA training pipeline for the Decker gauntlet, orchestrated
-via flywheel block executions within a single workspace.
+Three-phase IMPALA training for all three Decker subclasses (dueling,
+two_handed, defense), with 6 runs per subclass using deterministic seeds.
 
 | Phase    | Steps | Description                                 |
 |----------|------:|---------------------------------------------|
@@ -9,7 +9,8 @@ via flywheel block executions within a single workspace.
 | Curation |   5M  | Reward/deck decisions (combat heads frozen) |
 | Combined |   5M  | All phases jointly                          |
 
-Each phase is followed by a 4000-episode evaluation.
+Each phase is followed by a 4000-episode evaluation. Total: 18 runs
+(3 subclasses x 6 runs), each with 6 flywheel block executions.
 
 ## Prerequisites
 
@@ -19,20 +20,20 @@ Each phase is followed by a 4000-episode evaluation.
    docker build -f docker/Dockerfile.eval-rl -t cyberloop-eval-rl:latest .
    ```
 
-2. **Flywheel installed** in the cyberloop venv (see Setup below).
+2. **Flywheel installed** in a Python environment (see Setup below).
 
 ## Setup
-
-Create the venv and install dependencies (one-time):
 
 ```bash
 cd C:\Users\micha\github\cyber-root\cyberloop
 python -m venv .venv
+
 # Windows cmd
 .venv\Scripts\activate
 
 # Git Bash / WSL / macOS / Linux
 source .venv/Scripts/activate
+
 pip install pyyaml
 pip install -e ../flywheel
 ```
@@ -41,48 +42,37 @@ pip install -e ../flywheel
 
 ```bash
 cd C:\Users\micha\github\cyber-root\cyberloop
+
 # Windows cmd
 .venv\Scripts\activate
 
 # Git Bash / WSL / macOS / Linux
 source .venv/Scripts/activate
-python research/baseline_rl.py --subclass dueling --seed 42
+
+python research/baseline_rl.py
+python research/baseline_rl.py --baseline-seed 123  # different seed
 ```
 
 ## What it does
 
-1. Creates a flywheel workspace named `baseline-<uuid>` from the `train_eval` template.
-2. Runs `flywheel run block --block train` three times (combat, curation, combined),
-   chaining the checkpoint artifact from each phase into the next via `--bind`.
-3. Runs `flywheel run block --block eval` after each training phase (4000 episodes).
-4. Writes `research_manifest.json` into the workspace with scores, timings, and
-   artifact IDs for reproducibility.
-
-## Options
-
-| Flag               | Default    | Description                          |
-|--------------------|------------|--------------------------------------|
-| `--subclass`       | (required) | `dueling`, `two_handed`, or `defense`|
-| `--seed`           | `42`       | RNG seed for reproducibility         |
-| `--workspace`      | auto       | Override workspace name              |
-| `--combat-steps`   | `15000000` | Combat training timesteps            |
-| `--curation-steps` | `5000000`  | Curation training timesteps          |
-| `--combined-steps` | `5000000`  | Combined training timesteps          |
-| `--eval-episodes`  | `4000`     | Episodes per evaluation              |
+1. Derives 6 per-run seeds for each subclass from a single baseline seed (default 42).
+2. For each subclass and seed, creates a flywheel workspace and runs the three-phase
+   pipeline (combat → curation → combined), with evaluations after each phase.
+3. All 18 runs execute sequentially.
+4. Writes `research/baseline_rl_manifest.json` with all scores, timings, seeds,
+   and workspace names.
 
 ## Output
 
-All artifacts live in `foundry/workspaces/<workspace-name>/`:
+Each run creates a flywheel workspace in `foundry/workspaces/`:
 
 ```
-foundry/workspaces/baseline-a3f7b2c1/
+foundry/workspaces/baseline-dueling-a3f7b2c1/
   workspace.yaml            # full provenance graph
-  research_manifest.json    # scores, timings, config
   artifacts/
-    checkpoint@<id>/        # combat checkpoint
-    score@<id>/             # combat eval scores
-    checkpoint@<id>/        # curation checkpoint
-    score@<id>/             # curation eval scores
-    checkpoint@<id>/        # combined checkpoint
-    score@<id>/             # combined eval scores
+    checkpoint@<id>/        # combat / curation / combined checkpoints
+    score@<id>/             # eval scores (scores.json)
 ```
+
+The experiment-level manifest at `research/baseline_rl_manifest.json` aggregates
+results across all runs for analysis.

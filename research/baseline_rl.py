@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Baseline RL training pipeline for the Decker gauntlet.
+"""Baseline RL training for all three Decker subclasses.
 
-Runs three training phases inside a flywheel workspace, with 4000-episode
-evaluations after each:
+Runs six training runs per subclass (dueling, two_handed, defense),
+each a three-phase IMPALA pipeline orchestrated via flywheel:
   1. Combat    — 15M steps, card-play decisions only
   2. Curation  — 5M steps, reward/deck decisions (combat heads frozen)
   3. Combined  — 5M steps, all phases jointly
 
-Each phase is a flywheel block execution: one Docker container, with
-checkpoint artifacts chained between phases via input/output slots.
+Each phase is followed by a 4000-episode evaluation. All runs use
+deterministic seeds derived from a single baseline seed.
 
 Requires:
   - flywheel installed (pip install -e ../flywheel)
@@ -17,11 +17,12 @@ Requires:
 
 Usage:
     cd cyberloop
-    python research/baseline_rl.py --subclass dueling --seed 42
+    python research/baseline_rl.py
+    python research/baseline_rl.py --baseline-seed 123
 """
 
-import argparse
 import json
+import random
 import subprocess
 import sys
 import time
@@ -33,6 +34,14 @@ import yaml
 TEMPLATE = "train_eval"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FOUNDRY_DIR = PROJECT_ROOT / "foundry"
+
+SUBCLASSES = ["dueling", "two_handed", "defense"]
+RUNS_PER_SUBCLASS = 6
+
+COMBAT_STEPS = 15_000_000
+CURATION_STEPS = 5_000_000
+COMBINED_STEPS = 5_000_000
+EVAL_EPISODES = 4000
 
 
 def run_flywheel(args, label):
@@ -64,7 +73,7 @@ def load_workspace_yaml(name):
 
 
 def latest_checkpoint_artifact(ws_name):
-    """Find the most recently produced checkpoint artifact ID in the workspace."""
+    """Find the most recently produced checkpoint artifact ID."""
     ws = load_workspace_yaml(ws_name)
     checkpoint_artifacts = [
         (aid, entry) for aid, entry in ws.get("artifacts", {}).items()
@@ -73,165 +82,116 @@ def latest_checkpoint_artifact(ws_name):
     if not checkpoint_artifacts:
         print("ERROR: no checkpoint artifacts found in workspace", file=sys.stderr)
         sys.exit(1)
-    # Sort by creation time, take the latest.
     checkpoint_artifacts.sort(key=lambda x: x[1]["created_at"])
     return checkpoint_artifacts[-1][0]
 
 
 def find_model_pt(ws_name, artifact_id):
-    """Find the final_model.pt file within an artifact directory.
+    """Find final_model.pt within an artifact directory.
 
-    Returns the path relative to the artifact directory root, which
-    corresponds to the container mount point.
+    Returns the path relative to the artifact root (matches
+    the container mount point).
     """
     artifact_dir = workspace_path(ws_name) / "artifacts" / artifact_id
     matches = list(artifact_dir.rglob("final_model.pt"))
     if not matches:
         print(f"ERROR: no final_model.pt in {artifact_dir}", file=sys.stderr)
         sys.exit(1)
-    # Take the first (there should be exactly one for single-stage runs).
     return matches[0].relative_to(artifact_dir).as_posix()
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Baseline RL: combat -> curation -> combined, "
-                    "with flywheel block executions and evaluations")
-    parser.add_argument("--subclass", required=True,
-                        help="Fighter subclass (dueling, two_handed, defense)")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--workspace", default=None,
-                        help="Workspace name (default: baseline-<subclass>-<seed>)")
-    parser.add_argument("--race", default="human")
-    parser.add_argument("--synergy-group", default=None)
-    parser.add_argument("--combat-steps", type=int, default=15_000_000)
-    parser.add_argument("--curation-steps", type=int, default=5_000_000)
-    parser.add_argument("--combined-steps", type=int, default=5_000_000)
-    parser.add_argument("--eval-episodes", type=int, default=4000)
-    args = parser.parse_args()
+def run_single_pipeline(subclass, seed, ws_name):
+    """Run one combat → curation → combined pipeline in a workspace."""
 
-    ws_name = args.workspace or f"baseline-{uuid.uuid4().hex[:8]}"
-
-    # Common train args passed through to the container entrypoint.
     train_common = [
-        "--subclass", args.subclass,
-        "--seed", str(args.seed),
+        "--subclass", subclass,
+        "--seed", str(seed),
         "--checkpoint-dir", "/output",
     ]
-    if args.race != "human":
-        train_common += ["--race", args.race]
-    if args.synergy_group:
-        train_common += ["--synergy-group", args.synergy_group]
-
-    # Common eval args.
     eval_common = [
-        "--subclass", args.subclass,
-        "--episodes", str(args.eval_episodes),
-        "--seed", str(args.seed),
+        "--subclass", subclass,
+        "--episodes", str(EVAL_EPISODES),
+        "--seed", str(seed),
         "--output-dir", "/output",
     ]
-    if args.race != "human":
-        eval_common += ["--race", args.race]
-    if args.synergy_group:
-        eval_common += ["--synergy-group", args.synergy_group]
 
+    tag = f"{subclass}/seed-{seed}"
+    ws = str(workspace_path(ws_name))
     timings = {}
-    t_start = time.time()
 
     # ── Create workspace ─────────────────────────────────────────
     run_flywheel([
         "create", "workspace",
         "--name", ws_name,
         "--template", TEMPLATE,
-    ], "create workspace")
+    ], f"{tag}/create")
 
     # ── Phase 1: Combat (15M steps) ──────────────────────────────
     timings["train_combat"] = run_flywheel([
-        "run", "block",
-        "--workspace", str(workspace_path(ws_name)),
-        "--block", "train",
-        "--template", TEMPLATE,
-        "--",
-        "--combat-only",
-        "--combat-timesteps", str(args.combat_steps),
+        "run", "block", "--workspace", ws, "--block", "train",
+        "--template", TEMPLATE, "--",
+        "--combat-only", "--combat-timesteps", str(COMBAT_STEPS),
         *train_common,
-    ], "train/combat")
+    ], f"{tag}/train/combat")
 
     combat_ckpt = latest_checkpoint_artifact(ws_name)
-    combat_model_relpath = find_model_pt(ws_name, combat_ckpt)
+    combat_relpath = find_model_pt(ws_name, combat_ckpt)
 
     timings["eval_combat"] = run_flywheel([
-        "run", "block",
-        "--workspace", str(workspace_path(ws_name)),
-        "--block", "eval",
-        "--template", TEMPLATE,
-        "--bind", f"checkpoint={combat_ckpt}",
-        "--",
-        "--checkpoint", f"/input/checkpoint/{combat_model_relpath}",
+        "run", "block", "--workspace", ws, "--block", "eval",
+        "--template", TEMPLATE, "--bind", f"checkpoint={combat_ckpt}", "--",
+        "--checkpoint", f"/input/checkpoint/{combat_relpath}",
         *eval_common,
-    ], "eval/combat")
+    ], f"{tag}/eval/combat")
 
     # ── Phase 2: Curation (5M steps, frozen combat heads) ────────
     timings["train_curation"] = run_flywheel([
-        "run", "block",
-        "--workspace", str(workspace_path(ws_name)),
-        "--block", "train",
-        "--template", TEMPLATE,
-        "--bind", f"checkpoint={combat_ckpt}",
-        "--",
-        "--curation-only",
-        "--curation-timesteps", str(args.curation_steps),
-        "--init-model", f"/input/checkpoint/{combat_model_relpath}",
+        "run", "block", "--workspace", ws, "--block", "train",
+        "--template", TEMPLATE, "--bind", f"checkpoint={combat_ckpt}", "--",
+        "--curation-only", "--curation-timesteps", str(CURATION_STEPS),
+        "--init-model", f"/input/checkpoint/{combat_relpath}",
         *train_common,
-    ], "train/curation")
+    ], f"{tag}/train/curation")
 
     curation_ckpt = latest_checkpoint_artifact(ws_name)
-    curation_model_relpath = find_model_pt(ws_name, curation_ckpt)
+    curation_relpath = find_model_pt(ws_name, curation_ckpt)
 
     timings["eval_curation"] = run_flywheel([
-        "run", "block",
-        "--workspace", str(workspace_path(ws_name)),
-        "--block", "eval",
-        "--template", TEMPLATE,
-        "--bind", f"checkpoint={curation_ckpt}",
-        "--",
-        "--checkpoint", f"/input/checkpoint/{curation_model_relpath}",
+        "run", "block", "--workspace", ws, "--block", "eval",
+        "--template", TEMPLATE, "--bind", f"checkpoint={curation_ckpt}", "--",
+        "--checkpoint", f"/input/checkpoint/{curation_relpath}",
         *eval_common,
-    ], "eval/curation")
+    ], f"{tag}/eval/curation")
 
     # ── Phase 3: Combined (5M steps, all phases) ─────────────────
     timings["train_combined"] = run_flywheel([
-        "run", "block",
-        "--workspace", str(workspace_path(ws_name)),
-        "--block", "train",
-        "--template", TEMPLATE,
-        "--bind", f"checkpoint={curation_ckpt}",
-        "--",
-        "--shared",
-        "--shared-timesteps", str(args.combined_steps),
-        "--init-model", f"/input/checkpoint/{curation_model_relpath}",
+        "run", "block", "--workspace", ws, "--block", "train",
+        "--template", TEMPLATE, "--bind", f"checkpoint={curation_ckpt}", "--",
+        "--shared", "--shared-timesteps", str(COMBINED_STEPS),
+        "--init-model", f"/input/checkpoint/{curation_relpath}",
         *train_common,
-    ], "train/combined")
+    ], f"{tag}/train/combined")
 
     combined_ckpt = latest_checkpoint_artifact(ws_name)
-    combined_model_relpath = find_model_pt(ws_name, combined_ckpt)
+    combined_relpath = find_model_pt(ws_name, combined_ckpt)
 
     timings["eval_combined"] = run_flywheel([
-        "run", "block",
-        "--workspace", str(workspace_path(ws_name)),
-        "--block", "eval",
-        "--template", TEMPLATE,
-        "--bind", f"checkpoint={combined_ckpt}",
-        "--",
-        "--checkpoint", f"/input/checkpoint/{combined_model_relpath}",
+        "run", "block", "--workspace", ws, "--block", "eval",
+        "--template", TEMPLATE, "--bind", f"checkpoint={combined_ckpt}", "--",
+        "--checkpoint", f"/input/checkpoint/{combined_relpath}",
         *eval_common,
-    ], "eval/combined")
+    ], f"{tag}/eval/combined")
 
-    # ── Summary ──────────────────────────────────────────────────
-    total_time = time.time() - t_start
+    return {
+        "combat": combat_ckpt,
+        "curation": curation_ckpt,
+        "combined": combined_ckpt,
+    }, timings
+
+
+def collect_scores(ws_name):
+    """Read eval scores from score artifacts in a workspace."""
     ws_dir = workspace_path(ws_name)
-
-    # Collect eval scores from score artifacts.
     ws = load_workspace_yaml(ws_name)
     score_artifacts = [
         (aid, entry) for aid, entry in ws.get("artifacts", {}).items()
@@ -245,39 +205,92 @@ def main():
         scores_path = ws_dir / "artifacts" / aid / "scores.json"
         if scores_path.exists() and i < len(phase_labels):
             scores[phase_labels[i]] = json.loads(scores_path.read_text())
+    return scores
 
-    # Write research manifest alongside workspace.
-    manifest = {
-        "pipeline": "baseline_rl",
-        "workspace": ws_name,
-        "subclass": args.subclass,
-        "seed": args.seed,
-        "phases": {
-            "combat": {"timesteps": args.combat_steps, "checkpoint": combat_ckpt},
-            "curation": {"timesteps": args.curation_steps, "checkpoint": curation_ckpt},
-            "combined": {"timesteps": args.combined_steps, "checkpoint": combined_ckpt},
-        },
-        "eval_episodes": args.eval_episodes,
-        "timings_s": timings,
-        "total_time_s": total_time,
-        "scores_summary": {
-            phase: {k: v for k, v in s.items() if k != "fights_won"}
-            for phase, s in scores.items()
-        },
+
+def main():
+    baseline_seed = 42
+    if len(sys.argv) > 1 and sys.argv[1] == "--baseline-seed":
+        baseline_seed = int(sys.argv[2])
+
+    # Derive per-run seeds deterministically.
+    rng = random.Random(baseline_seed)
+    run_seeds = {
+        subclass: [rng.randint(0, 2**31 - 1) for _ in range(RUNS_PER_SUBCLASS)]
+        for subclass in SUBCLASSES
     }
-    manifest_path = ws_dir / "research_manifest.json"
+
+    print(f"Baseline RL experiment")
+    print(f"  Baseline seed: {baseline_seed}")
+    print(f"  Subclasses:    {', '.join(SUBCLASSES)}")
+    print(f"  Runs each:     {RUNS_PER_SUBCLASS}")
+    print(f"  Phases:        combat ({COMBAT_STEPS/1e6:.0f}M) → "
+          f"curation ({CURATION_STEPS/1e6:.0f}M) → "
+          f"combined ({COMBINED_STEPS/1e6:.0f}M)")
+    print(f"  Eval episodes: {EVAL_EPISODES}")
+    total_runs = len(SUBCLASSES) * RUNS_PER_SUBCLASS
+    print(f"  Total runs:    {total_runs}")
+
+    results = {}
+    t_start = time.time()
+
+    for subclass in SUBCLASSES:
+        for run_idx, seed in enumerate(run_seeds[subclass]):
+            ws_name = f"baseline-{subclass}-{uuid.uuid4().hex[:8]}"
+            label = f"{subclass} run {run_idx + 1}/{RUNS_PER_SUBCLASS} (seed={seed})"
+            print(f"\n{'#' * 60}")
+            print(f"# {label}")
+            print(f"# workspace: {ws_name}")
+            print(f"{'#' * 60}")
+
+            checkpoints, timings = run_single_pipeline(subclass, seed, ws_name)
+            scores = collect_scores(ws_name)
+
+            results.setdefault(subclass, []).append({
+                "run_index": run_idx,
+                "seed": seed,
+                "workspace": ws_name,
+                "checkpoints": checkpoints,
+                "timings_s": timings,
+                "scores": {
+                    phase: {k: v for k, v in s.items() if k != "fights_won"}
+                    for phase, s in scores.items()
+                },
+            })
+
+    total_time = time.time() - t_start
+
+    # Write experiment manifest.
+    manifest = {
+        "experiment": "baseline_rl",
+        "baseline_seed": baseline_seed,
+        "config": {
+            "combat_steps": COMBAT_STEPS,
+            "curation_steps": CURATION_STEPS,
+            "combined_steps": COMBINED_STEPS,
+            "eval_episodes": EVAL_EPISODES,
+            "runs_per_subclass": RUNS_PER_SUBCLASS,
+        },
+        "run_seeds": run_seeds,
+        "results": results,
+        "total_time_s": total_time,
+    }
+    manifest_path = PROJECT_ROOT / "research" / "baseline_rl_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2))
 
+    # Print summary.
     print(f"\n{'=' * 60}")
-    print("Baseline RL pipeline complete.")
-    print(f"  Workspace: {ws_dir}")
-    print(f"  Time:      {total_time:.0f}s")
-    for phase in phase_labels:
-        if phase in scores:
-            s = scores[phase]
-            print(f"  {phase:10s}  mean={s['mean']:.1f}  median={s['median']:.0f}  "
-                  f"std={s['std']:.1f}  [{s['min']}-{s['max']}]")
-    print(f"  Manifest:  {manifest_path}")
+    print("Baseline RL experiment complete.")
+    print(f"  Total time: {total_time:.0f}s")
+    for subclass in SUBCLASSES:
+        runs = results.get(subclass, [])
+        for phase in ("combat", "curation", "combined"):
+            means = [r["scores"][phase]["mean"] for r in runs if phase in r["scores"]]
+            if means:
+                avg = sum(means) / len(means)
+                print(f"  {subclass:12s} {phase:10s}  "
+                      f"avg_mean={avg:.1f} across {len(means)} runs")
+    print(f"  Manifest: {manifest_path}")
 
 
 if __name__ == "__main__":
