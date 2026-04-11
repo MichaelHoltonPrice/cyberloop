@@ -46,7 +46,7 @@ EVAL_EPISODES = 4000
 
 def run_flywheel(args, label):
     """Run a flywheel CLI command from the project root."""
-    cmd = ["flywheel"] + args
+    cmd = ["python", "-m", "flywheel"] + args
     print(f"\n{'=' * 60}")
     print(f"[{label}] {' '.join(cmd)}")
     print("=" * 60)
