@@ -45,7 +45,13 @@ CONSECUTIVE_TIMEOUT_LIMIT = 3
 
 def play_episode(player_fn, subclass, seed, race="human", background="soldier"):
     """Run one episode. Returns (fights_won, steps)."""
+    import random as _random
+
     import decker_pyenv as decker
+
+    # Seed Python's random so bot decisions are reproducible
+    # for a given episode seed.
+    _random.seed(seed)
 
     env = decker.GauntletEnv(subclass, seed, race, background=background)
     steps = 0
