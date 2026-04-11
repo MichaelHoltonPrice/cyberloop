@@ -2,10 +2,10 @@ You are a game-playing bot developer for a roguelike deckbuilder called Decker.
 
 Your task: write a Python player function that plays the Fighter class,
 **{{SUBCLASS}} subclass**, as well as possible. Your bot will be evaluated
-exclusively against this subclass — read the subclass-specific cards and
+exclusively against this subclass -- read the subclass-specific cards and
 synergies carefully and tailor your strategy to them.
 
-The player handles ALL game phases — combat (playing cards), reward
+The player handles ALL game phases -- combat (playing cards), reward
 selection, deck swapping, deck rebuilding, collection overflow, and
 innate card choice.
 
@@ -27,15 +27,15 @@ The file will be saved to bot.py in /workspace.
 Before writing your bot, read these files to understand the game.
 The source code is mounted read-only:
 
-- /source/content/src/cards.rs — ALL card definitions (costs, effects, synergies)
-- /source/content/src/enemies.rs — enemy definitions
-- /source/content/src/encounters.rs — fight encounter compositions
-- /source/content/src/starter_decks.rs — Fighter starter deck
-- /source/engine/src/combat.rs — combat mechanics (damage, block, statuses)
-- /source/engine/src/enemy.rs — enemy intent types (Attack, Defend, Buff, etc.)
-- /source/engine/src/status.rs — status effect definitions
-- /source/gauntlet/src/observation.rs — observation JSON structure
-- /source/gauntlet/src/lib.rs — gauntlet game mode, phases, reward generation
+- /source/content/src/cards.rs -- ALL card definitions (costs, effects, synergies)
+- /source/content/src/enemies.rs -- enemy definitions
+- /source/content/src/encounters.rs -- fight encounter compositions
+- /source/content/src/starter_decks.rs -- Fighter starter deck
+- /source/engine/src/combat.rs -- combat mechanics (damage, block, statuses)
+- /source/engine/src/enemy.rs -- enemy intent types (Attack, Defend, Buff, etc.)
+- /source/engine/src/status.rs -- status effect definitions
+- /source/gauntlet/src/observation.rs -- observation JSON structure
+- /source/gauntlet/src/lib.rs -- gauntlet game mode, phases, reward generation
 
 ## Observation JSON structure
 
@@ -67,22 +67,22 @@ The obs_json contains:
 ## Action label format
 
 Action labels are opaque Rust debug strings. Never synthesize label strings
-yourself — always scan the action_labels list and return a matching index.
+yourself -- always scan the action_labels list and return a matching index.
 If parsing fails, fall back to a safe action (EndTurn in combat, index 0
 otherwise).
 
 Examples of actual label strings:
-- `CombatAction(PlayCard { hand_index: 0, target: Some(1) })` — play card 0 at enemy 1
-- `CombatAction(PlayCard { hand_index: 2, target: None })` — play untargeted card 2
-- `CombatAction(DiscardCard { hand_index: 3 })` — discard card 3
-- `CombatAction(EndTurn)` — end your turn
-- `PickReward(1)` — pick reward card 1
-- `SkipReward` — skip the reward
-- `SwapIntoDeck(0)` — swap card 0 into play deck
-- `SkipSwap` — skip the swap
-- `ChooseDeckSlotCard(2)` — assign card 2 to deck slot
-- `RemoveCollectionCard(5)` — remove card 5 from collection
-- `ChooseInnate(0)` — choose innate card 0
+- `CombatAction(PlayCard { hand_index: 0, target: Some(1) })` -- play card 0 at enemy 1
+- `CombatAction(PlayCard { hand_index: 2, target: None })` -- play untargeted card 2
+- `CombatAction(DiscardCard { hand_index: 3 })` -- discard card 3
+- `CombatAction(EndTurn)` -- end your turn
+- `PickReward(1)` -- pick reward card 1
+- `SkipReward` -- skip the reward
+- `SwapIntoDeck(0)` -- swap card 0 into play deck
+- `SkipSwap` -- skip the swap
+- `ChooseDeckSlotCard(2)` -- assign card 2 to deck slot
+- `RemoveCollectionCard(5)` -- remove card 5 from collection
+- `ChooseInnate(0)` -- choose innate card 0
 
 ## Action label parser
 
@@ -102,7 +102,7 @@ It returns structured tuples:
     # -> ("pick_reward", 1)
 
 All return types:
-- `("play_card", hand_index, target)` — target is int or None
+- `("play_card", hand_index, target)` -- target is int or None
 - `("discard_card", hand_index)`
 - `("end_turn",)`
 - `("pick_reward", index)`
@@ -112,7 +112,7 @@ All return types:
 - `("choose_deck_slot", index)`
 - `("remove_collection_card", index)`
 - `("choose_innate", index)`
-- `("unknown", original_label)` — fallback for unrecognized labels
+- `("unknown", original_label)` -- fallback for unrecognized labels
 
 Use this parser. Do not write your own label parsing logic.
 
@@ -122,7 +122,7 @@ Use this parser. Do not write your own label parsing logic.
 - Each turn: draw 5 cards, get 3 energy. Play cards (cost energy), then end turn.
 - Attack cards deal damage (all attacks auto-hit). Defense cards give block.
 - Block absorbs damage for one turn only (resets each turn unless BlockRetention is active).
-- Enemy intents are visible — you can see what they'll do.
+- Enemy intents are visible -- you can see what they'll do.
 - After winning a fight: pick a reward card (or skip), then possibly swap/rebuild deck.
 - Play deck is always 16 cards. Collection can grow up to 40.
 - HP persists between fights. Level up every few fights (gain HP, unlock cards).
@@ -142,7 +142,7 @@ The evaluator enforces two speed gates:
 Common pitfalls that cause timeouts:
 - Infinite loops from playing recycle cards repeatedly without making progress
 - O(n^2) or worse algorithms over card lists
-- Importing heavy modules (torch, numpy) inside player_fn — import at module level
+- Importing heavy modules (torch, numpy) inside player_fn -- import at module level
 - Not ending the turn when no useful cards can be played
 
 Always include a safety net: if cards_played_this_turn exceeds 50, force EndTurn.
@@ -160,13 +160,13 @@ The tool returns JSON with mean fights won, per-episode scores, and timing.
 
 You may be continuing from a previous agent segment. Check for:
 
-- `/input/bot/bot.py` — the best bot from the previous segment. If it exists,
+- `/input/bot/bot.py` -- the best bot from the previous segment. If it exists,
   read it as your starting point instead of writing from scratch.
-- `/input/summary/summary.txt` — a summary of what was tried previously. If it
+- `/input/summary/summary.txt` -- a summary of what was tried previously. If it
   exists, read it for context on strategies attempted, scores achieved,
   and what to try next.
 
-If these files do not exist, this is the first segment — start fresh.
+If these files do not exist, this is the first segment -- start fresh.
 
 ## Workflow
 
