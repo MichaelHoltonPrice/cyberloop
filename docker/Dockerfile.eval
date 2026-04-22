@@ -1,0 +1,84 @@
+# Multi-stage build for the cyberloop evaluation block.
+#
+# Stage 1: compile decker_pyenv (Rust + PyO3) via maturin.
+# Stage 2: slim Python runtime with CPU torch and numpy.
+#
+# Build from the cyberloop root:
+#   docker build -f docker/Dockerfile.eval -t cyberloop-eval:latest .
+#
+# The substrate's ProcessExitExecutor invokes this image with
+# input/output bind mounts at ``/input/<slot>`` and
+# ``/output/<slot>``.  The ENTRYPOINT pre-fills ``--checkpoint``
+# and ``--output-dir`` with the substrate-side paths so patterns
+# only declare logical knobs (subclass, episodes, ...) in their
+# ``overrides:`` map.
+#
+# Quick standalone smoke test (outside flywheel):
+#   docker run --rm \
+#     -v /path/to/checkpoint_dir:/input/checkpoint:ro \
+#     -v /path/to/score_out:/output/score \
+#     cyberloop-eval:latest --subclass dueling --episodes 100
+
+# ---------------------------------------------------------------------------
+# Stage 1: build decker_pyenv
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl build-essential pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN pip install --no-cache-dir maturin
+
+COPY Cargo.toml /build/
+COPY crates/engine/ /build/crates/engine/
+COPY crates/content/ /build/crates/content/
+COPY crates/gauntlet/ /build/crates/gauntlet/
+COPY crates/pyenv/ /build/crates/pyenv/
+
+WORKDIR /build/crates/pyenv
+RUN maturin build --release --interpreter python3.12 -o /build/wheels/
+
+# ---------------------------------------------------------------------------
+# Stage 2: runtime (CPU-only — eval is inference, no CUDA needed)
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim
+
+COPY --from=builder /build/wheels/*.whl /tmp/wheels/
+RUN pip install --no-cache-dir /tmp/wheels/*.whl && rm -rf /tmp/wheels
+
+# CPU-only torch keeps the image much smaller than the CUDA
+# build.  numpy comes from default PyPI; torch comes from the
+# PyTorch CPU wheel index.  Splitting the installs avoids
+# routing numpy through pytorch.org (which does not serve
+# arbitrary numpy wheels and can break the build).
+RUN pip install --no-cache-dir numpy
+RUN pip install --no-cache-dir torch \
+        --index-url https://download.pytorch.org/whl/cpu
+
+# Prevent PyTorch intra-op thread oversubscription when the
+# eval script spawns a process pool of inference workers.
+# Without this, 4+ workers cause catastrophic slowdown under
+# WSL2 / Docker Desktop.
+ENV OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+
+COPY scripts/eval_common.py /app/scripts/eval_common.py
+COPY scripts/eval_checkpoint.py /app/scripts/eval_checkpoint.py
+COPY scripts/eval_io.py /app/scripts/eval_io.py
+COPY scripts/numpy_eval.py /app/scripts/numpy_eval.py
+COPY scripts/model.py /app/scripts/model.py
+COPY scripts/strategy.py /app/scripts/strategy.py
+
+WORKDIR /app/scripts
+
+# Pre-fill the substrate-mount paths so patterns never need to
+# know them.  Pattern-supplied overrides append after these (per
+# Docker ENTRYPOINT/CMD semantics: extra args concatenate onto
+# the ENTRYPOINT array).
+ENTRYPOINT ["python", "eval_checkpoint.py", \
+            "--checkpoint", "/input/checkpoint/checkpoint.pt", \
+            "--output-dir", "/output/score"]

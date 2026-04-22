@@ -29,7 +29,11 @@ client/
     card_renderer/  Reusable card rendering
 scripts/          RL training (train_impala.py), eval, model, env wrapper
 cyberloop/        Project hooks loaded by `flywheel run pattern`
-tests/            Unit tests for the project hooks
+docker/           Block container Dockerfiles (Dockerfile.eval, ...)
+foundry/          Workspace template (`templates/cyberloop.yaml`)
+patterns/         Pattern YAMLs (`eval_only.yaml`, ...)
+workforce/        Block YAMLs (`blocks/Eval.yaml`, ...)
+tests/            Unit tests for the project hooks and blocks
 ```
 
 ## Setup
@@ -58,13 +62,20 @@ cd ../..
 
 Pattern runs are driven by [Flywheel](../flywheel/), the sibling substrate that
 launches block containers and stitches their I/O through workspace artifacts.
-The repo currently ships the project-hooks skeleton only: `flywheel.yaml`
-points at `cyberloop.project:ProjectHooks`, which hands the substrate a single
-`ProcessExitExecutor` for every block.  Real block definitions
-(`workforce/blocks/`) and patterns (`patterns/`) — starting with a
-training-segment block, an evaluation block, and an alternating train-eval
-pattern — land in follow-up commits.  See the flywheel repo for details on
-creating workspaces and running patterns once those blocks land.
+`flywheel.yaml` points at `cyberloop.project:ProjectHooks`, which hands the
+substrate a single `ProcessExitExecutor` for every block (cyberloop's blocks
+are all one-shot containers).  The currently-shipping surface:
+
+- `workforce/blocks/Eval.yaml` — runs `eval_checkpoint.py` against a
+  pre-staged checkpoint artifact and writes a `score` artifact.
+- `foundry/templates/cyberloop.yaml` — declares the `checkpoint` and
+  `score` artifact contract every cyberloop pattern shares.
+- `patterns/eval_only.yaml` — single-instance pattern that runs `Eval`
+  once and ends the run when the container exits.
+
+The training-segment block and the alternating train-eval pattern land in
+follow-up commits.  See the flywheel repo for details on creating workspaces
+and running patterns.
 
 ## License
 

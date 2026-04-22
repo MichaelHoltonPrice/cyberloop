@@ -1,0 +1,14 @@
+# Cyberloop workspace template.
+#
+# Declares the artifact contract every cyberloop pattern shares
+# and the blocks the patterns reference by name.  Block bodies
+# live under ``workforce/blocks/<name>.yaml`` and are resolved
+# at template-load time via the project's BlockRegistry.
+artifacts:
+  - name: checkpoint
+    kind: copy
+  - name: score
+    kind: copy
+
+blocks:
+  - Eval

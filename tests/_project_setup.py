@@ -1,19 +1,22 @@
 """Shared workspace + template scaffolding for cyberloop tests.
 
-Builds a minimal cyberloop project on disk
-(``flywheel.yaml``, an empty template, and a clean
-:class:`Workspace`) and returns the trio that nearly every
-cyberloop test needs.
+Builds a minimal cyberloop project on disk (``flywheel.yaml``,
+the production template, every block YAML cyberloop ships, and
+a clean :class:`Workspace`) and returns the trio that nearly
+every cyberloop test needs.
 
 Lives outside :file:`conftest.py` so callers can either grab
 the ``project_setup`` pytest fixture *or* build the trio
 explicitly (useful for parameterized tests that need several
 independent workspaces inside a single test).
 
-The template starts empty: cyberloop ships its own real
-template once the Train and Eval blocks land; until then tests
-that need declared blocks should extend the YAML in this
-helper rather than reaching into ``BlockRegistry`` directly,
+The template and per-block YAML strings here are intentionally
+literal copies of the production files under
+``foundry/templates/`` and ``workforce/blocks/``.  Mirroring
+them keeps tests independent of the on-disk repo layout (so
+the suite still runs from a clean checkout) while making the
+tested shape obvious.  When a new production block lands, add
+its YAML constant here and append the name to ``TEMPLATE_YAML``
 to keep one source of truth for the test project's shape.
 """
 
@@ -28,8 +31,26 @@ from flywheel.workspace import Workspace
 
 
 TEMPLATE_YAML = """\
-artifacts: []
-blocks: []
+artifacts:
+  - name: checkpoint
+    kind: copy
+  - name: score
+    kind: copy
+
+blocks:
+  - Eval
+"""
+
+EVAL_BLOCK_YAML = """\
+name: Eval
+runner: container
+image: cyberloop-eval:latest
+inputs:
+  - name: checkpoint
+    container_path: /input/checkpoint
+outputs:
+  - name: score
+    container_path: /output/score
 """
 
 
@@ -38,12 +59,12 @@ def build_project(
     """Create a minimal cyberloop project under ``tmp_path``.
 
     Returns ``(workspace, template, project_root)``: a fresh
-    workspace whose template declares no artifacts or blocks
-    yet, plus the project root directory containing
+    workspace whose template declares cyberloop's artifact
+    contract (``checkpoint``, ``score``) and the ``Eval`` block,
+    plus the project root directory containing
     ``flywheel.yaml``.  The on-disk shape mirrors a real
     cyberloop checkout: ``foundry/templates/`` for templates
-    and ``workforce/blocks/`` for block YAMLs (the latter
-    starts empty here).
+    and ``workforce/blocks/`` for block YAMLs.
     """
     project = tmp_path / "project"
     project.mkdir()
@@ -58,6 +79,7 @@ def build_project(
 
     blocks_dir = project / "workforce" / "blocks"
     blocks_dir.mkdir(parents=True)
+    (blocks_dir / "Eval.yaml").write_text(EVAL_BLOCK_YAML)
     registry = BlockRegistry.from_directory(blocks_dir)
 
     workspaces = project / "foundry" / "workspaces"

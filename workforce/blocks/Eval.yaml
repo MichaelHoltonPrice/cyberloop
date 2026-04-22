@@ -1,0 +1,29 @@
+# Evaluates an RL checkpoint against the Decker gauntlet by
+# running parallel greedy episodes.  One container per
+# evaluation; the substrate launches it via ``ProcessExitExecutor``.
+#
+# I/O for one execution:
+#   /input/checkpoint/checkpoint.pt    — model to evaluate
+#   /input/checkpoint/config.json      — model_kwargs sidecar (optional)
+#   /input/checkpoint/version.json     — engine-version sidecar (optional)
+#   /output/score/scores.json          — per-episode + summary stats
+#   /output/score/output_manifest.json — informational; the substrate
+#                                        sweeps /output/score/* by
+#                                        directory contents alone.
+#
+# The container's entrypoint pre-fills ``--checkpoint`` and
+# ``--output-dir`` with the substrate-mount paths above, so
+# patterns only need to declare logical eval knobs in their
+# ``overrides:`` map (subclass, episodes, backend, ...).  Each
+# ``key: value`` becomes ``--key value`` argv via
+# ``ProcessExitExecutor``'s convention; underscores in keys
+# render as hyphens.
+name: Eval
+runner: container
+image: cyberloop-eval:latest
+inputs:
+  - name: checkpoint
+    container_path: /input/checkpoint
+outputs:
+  - name: score
+    container_path: /output/score

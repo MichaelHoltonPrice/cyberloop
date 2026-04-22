@@ -26,9 +26,14 @@ The client depends on engine crates via relative paths but compiles independentl
   (`model.py`), Gym wrapper (`decker_env.py`), and bot harness.
 - `cyberloop/` — the `cyberloop.project:ProjectHooks` class consumed by
   `flywheel run pattern`.  Stays thin: the hooks hand the substrate a
-  single `ProcessExitExecutor` for every block; real block YAMLs and
-  patterns (and the topology they encode) land in follow-up commits as
-  the training-segment and evaluation blocks materialize.
+  single `ProcessExitExecutor` for every block (cyberloop blocks are all
+  one-shot containers).  The block YAMLs and patterns themselves do the
+  topology work.
+- `workforce/blocks/`, `foundry/templates/`, `patterns/`,
+  `docker/Dockerfile.eval` — currently ship the `Eval` block, the shared
+  `checkpoint`/`score` artifact contract, and the `eval_only` pattern.
+  The training-segment block and the alternating train-eval pattern land
+  in follow-up commits.
 
 ## Build and test
 
