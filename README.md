@@ -27,8 +27,9 @@ client/
   crates/
     client/       Bevy GUI client -- play the game interactively
     card_renderer/  Reusable card rendering
-scripts/          Headless play harness, player implementations
-docker/           Container definitions for training and evaluation
+scripts/          RL training (train_impala.py), eval, model, env wrapper
+cyberloop/        Project hooks loaded by `flywheel run pattern`
+tests/            Unit tests for the project hooks
 ```
 
 ## Setup
@@ -46,13 +47,24 @@ python -m venv .venv
 cd crates/pyenv
 ../../.venv/Scripts/maturin develop --release
 cd ../..
+
+# Project hooks + dev tools (editable install of the cyberloop package).
+# Flywheel itself is installed editable from the sibling repo:
+.venv/Scripts/pip install -e ../flywheel
+.venv/Scripts/pip install -e ".[dev]"
 ```
 
 ## Orchestration
 
-Game runs are orchestrated by [Flywheel](../flywheel/), a sibling project that
-wires Docker containers into measurable improvement loops. See the flywheel repo
-for details on running training pipelines, agent sweeps, and evaluations.
+Pattern runs are driven by [Flywheel](../flywheel/), the sibling substrate that
+launches block containers and stitches their I/O through workspace artifacts.
+The repo currently ships the project-hooks skeleton only: `flywheel.yaml`
+points at `cyberloop.project:ProjectHooks`, which hands the substrate a single
+`ProcessExitExecutor` for every block.  Real block definitions
+(`workforce/blocks/`) and patterns (`patterns/`) — starting with a
+training-segment block, an evaluation block, and an alternating train-eval
+pattern — land in follow-up commits.  See the flywheel repo for details on
+creating workspaces and running patterns once those blocks land.
 
 ## License
 
