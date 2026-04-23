@@ -1,7 +1,6 @@
 """Tests for the ``Eval`` block and its wiring.
 
-Covers the ``eval_only`` pattern and the per-block executor
-selection through :class:`cyberloop.project.ProjectHooks`.
+Covers the ``eval_only`` pattern metadata and Eval block shape.
 
 Three concentric rings of coverage:
 
@@ -9,12 +8,7 @@ Three concentric rings of coverage:
     in-tmp YAML strings to lock the parsed-block / parsed-template
     contract the rest of the test suite depends on.
 
-2.  *Wiring* tests run the real ``ProjectHooks`` against a real
-    ``BlockDefinition`` from the fixture's template and assert
-    the block lands on :class:`ProcessExitExecutor` (one-shot
-    container path).  No Docker is touched.
-
-3.  *Production-file* tests load the actual on-disk
+2.  *Production-file* tests load the actual on-disk
     ``workforce/blocks/Eval.yaml``,
     ``foundry/templates/cyberloop.yaml``, and
     ``patterns/eval_only.yaml`` so that drift between the test
@@ -28,12 +22,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from flywheel.blocks.registry import BlockRegistry
-from flywheel.executor import ProcessExitExecutor
 from flywheel.pattern import ContinuousTrigger, Pattern
 from flywheel.template import Template
-
-from cyberloop.project import ProjectHooks
-
 
 CYBERLOOP_ROOT = Path(__file__).resolve().parent.parent
 
@@ -83,11 +73,10 @@ class TestEvalBlockYaml:
         assert score_out.container_path == "/output/score"
 
     def test_no_post_check(self, project_setup):
-        # ``ProcessExitExecutor`` does not invoke ``post_check``
-        # for one-shot blocks today (only RequestResponseExecutor
-        # does).  Declaring one on Eval would silently no-op,
-        # which would be confusing — assert the absence so a
-        # future addition has to update this test deliberately.
+        # The ad hoc ephemeral-container path does not invoke ``post_check``.
+        # Declaring one on Eval would silently no-op, which would
+        # be confusing; assert the absence so a future addition has
+        # to update this test deliberately.
         _, _, project = project_setup
         registry = BlockRegistry.from_directory(
             project / "workforce" / "blocks")
@@ -133,28 +122,6 @@ class TestCyberloopTemplate:
         assert checkpoint_out.container_path == "/output/checkpoint"
 
 
-class TestExecutorFactoryDispatchesEval:
-    """``executor_factory`` routes Eval to ProcessExitExecutor.
-
-    Mirrors the production hot path: the runner asks the project
-    for an executor for a block from its own template, and gets
-    back the one-shot container executor.  No Docker invocation.
-    """
-
-    def test_eval_block_dispatches_via_process_exit(
-            self, project_setup):
-        ws, template, project = project_setup
-        eval_def = next(
-            b for b in template.blocks if b.name == "Eval")
-
-        hooks = ProjectHooks()
-        overrides = hooks.init(ws, template, project, [])
-        executor = overrides["executor_factory"](eval_def)
-
-        assert isinstance(executor, ProcessExitExecutor)
-        assert executor is hooks._executor
-
-
 class TestEvalOnlyPattern:
     """``eval_only`` parses into the one-shot eval shape.
 
@@ -196,12 +163,8 @@ class TestEvalOnlyPattern:
         assert eval_instance.inputs == ["checkpoint"]
 
     def test_overrides_carry_eval_knobs(self):
-        # These keys turn into ``--subclass dueling
-        # --episodes 4000 --backend numpy`` argv via
-        # ``ProcessExitExecutor``'s
-        # ``--{key.replace('_', '-')} {value}`` convention.  The
-        # container's ENTRYPOINT pre-fills ``--checkpoint`` and
-        # ``--output-dir``, so those don't appear here.
+        # These keys are retained as pattern metadata while
+        # Cyberloop pattern execution is deferred.
         eval_instance = self._load().iter_instances()[0]
         assert eval_instance.overrides == {
             "subclass": "dueling",
