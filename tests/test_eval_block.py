@@ -76,8 +76,9 @@ class TestEvalBlockYaml:
         assert checkpoint_in.name == "checkpoint"
         assert checkpoint_in.container_path == "/input/checkpoint"
 
-        assert len(eval_def.outputs) == 1
-        score_out = eval_def.outputs[0]
+        normal_outputs = eval_def.outputs_for("normal")
+        assert len(normal_outputs) == 1
+        score_out = normal_outputs[0]
         assert score_out.name == "score"
         assert score_out.container_path == "/output/score"
 
@@ -98,7 +99,7 @@ class TestCyberloopTemplate:
     """The cyberloop template wires Eval and the shared artifacts.
 
     Pins the ``checkpoint`` / ``score`` artifact contract and
-    that Eval is the (only) block declared so far.
+    that Train/Eval are the declared one-shot blocks.
     """
 
     def test_artifact_contract(self, project_setup):
@@ -109,7 +110,27 @@ class TestCyberloopTemplate:
     def test_eval_block_in_template(self, project_setup):
         _, template, _ = project_setup
         block_names = [b.name for b in template.blocks]
-        assert block_names == ["Eval"]
+        assert block_names == ["Train", "Eval"]
+
+    def test_train_block_in_template(self, project_setup):
+        _, template, _ = project_setup
+        train = next(b for b in template.blocks if b.name == "Train")
+        assert train.runner == "container"
+        assert train.lifecycle == "one_shot"
+        assert train.image == "cyberloop-train:latest"
+        assert "--gpus" in train.docker_args
+
+        assert len(train.inputs) == 1
+        checkpoint_in = train.inputs[0]
+        assert checkpoint_in.name == "checkpoint"
+        assert checkpoint_in.optional is True
+        assert checkpoint_in.container_path == "/input/checkpoint"
+
+        normal_outputs = train.outputs_for("normal")
+        assert len(normal_outputs) == 1
+        checkpoint_out = normal_outputs[0]
+        assert checkpoint_out.name == "checkpoint"
+        assert checkpoint_out.container_path == "/output/checkpoint"
 
 
 class TestExecutorFactoryDispatchesEval:
@@ -214,13 +235,14 @@ class TestProductionFilesParseAgainstRegistry:
 
     def test_workforce_blocks_directory_loads(self):
         registry = BlockRegistry.from_directory(self.BLOCKS_DIR)
-        assert "Eval" in registry
+        assert {"Train", "Eval"}.issubset(set(registry.names()))
 
     def test_template_loads_and_resolves_eval(self):
         registry = BlockRegistry.from_directory(self.BLOCKS_DIR)
         template = Template.from_yaml(
             self.TEMPLATE_PATH, block_registry=registry)
         assert "Eval" in [b.name for b in template.blocks]
+        assert "Train" in [b.name for b in template.blocks]
         assert {a.name for a in template.artifacts} == {
             "checkpoint", "score"}
 

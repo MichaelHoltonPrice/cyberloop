@@ -38,7 +38,27 @@ artifacts:
     kind: copy
 
 blocks:
+  - Train
   - Eval
+"""
+
+TRAIN_BLOCK_YAML = """\
+name: Train
+runner: container
+image: cyberloop-train:latest
+docker_args:
+  - --gpus
+  - all
+  - --shm-size
+  - 8g
+inputs:
+  - name: checkpoint
+    container_path: /input/checkpoint
+    optional: true
+outputs:
+  normal:
+    - name: checkpoint
+      container_path: /output/checkpoint
 """
 
 EVAL_BLOCK_YAML = """\
@@ -79,6 +99,7 @@ def build_project(
 
     blocks_dir = project / "workforce" / "blocks"
     blocks_dir.mkdir(parents=True)
+    (blocks_dir / "Train.yaml").write_text(TRAIN_BLOCK_YAML)
     (blocks_dir / "Eval.yaml").write_text(EVAL_BLOCK_YAML)
     registry = BlockRegistry.from_directory(blocks_dir)
 

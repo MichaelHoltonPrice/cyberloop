@@ -63,9 +63,12 @@ cd ../..
 Pattern runs are driven by [Flywheel](../flywheel/), the sibling substrate that
 launches block containers and stitches their I/O through workspace artifacts.
 `flywheel.yaml` points at `cyberloop.project:ProjectHooks`, which hands the
-substrate a single `ProcessExitExecutor` for every block (cyberloop's blocks
-are all one-shot containers).  The currently-shipping surface:
+substrate a single one-shot container executor for pattern runs.  Ad hoc block
+execution goes through Flywheel's canonical ephemeral pipeline.  The
+currently-shipping surface:
 
+- `workforce/blocks/Train.yaml` — runs `train_impala.py` and writes a
+  `checkpoint` artifact.
 - `workforce/blocks/Eval.yaml` — runs `eval_checkpoint.py` against a
   pre-staged checkpoint artifact and writes a `score` artifact.
 - `foundry/templates/cyberloop.yaml` — declares the `checkpoint` and
@@ -73,9 +76,14 @@ are all one-shot containers).  The currently-shipping surface:
 - `patterns/eval_only.yaml` — single-instance pattern that runs `Eval`
   once and ends the run when the container exits.
 
-The training-segment block and the alternating train-eval pattern land in
-follow-up commits.  See the flywheel repo for details on creating workspaces
-and running patterns.
+The alternating train-eval pattern lands in a follow-up commit.  See the
+flywheel repo for details on creating workspaces and running patterns.
+
+Ad hoc training uses the base Flywheel block command from the cyberloop root:
+
+```bash
+flywheel run block --workspace foundry/workspaces/<workspace> --block Train --template cyberloop -- --subclass dueling --combat-only
+```
 
 ## License
 

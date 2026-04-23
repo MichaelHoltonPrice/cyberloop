@@ -1,0 +1,26 @@
+# Trains an RL checkpoint for the Decker gauntlet.
+#
+# The image entrypoint pre-fills ``--checkpoint-dir`` with
+# ``/output/checkpoint``.  Ad hoc runs pass training knobs as
+# trailing args, for example:
+#
+#   flywheel run block <ws> Train cyberloop -- --subclass dueling --combat-only
+#
+# If a prior checkpoint is bound, callers may pass
+# ``--init-model /input/checkpoint/checkpoint.pt``.
+name: Train
+runner: container
+image: cyberloop-train:latest
+docker_args:
+  - --gpus
+  - all
+  - --shm-size
+  - 8g
+inputs:
+  - name: checkpoint
+    container_path: /input/checkpoint
+    optional: true
+outputs:
+  normal:
+    - name: checkpoint
+      container_path: /output/checkpoint

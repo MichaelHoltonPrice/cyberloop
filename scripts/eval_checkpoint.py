@@ -37,6 +37,13 @@ if _scripts_dir not in sys.path:
 from eval_io import print_summary, write_scores
 
 
+def write_flywheel_termination(reason: str = "normal") -> None:
+    """Announce successful completion to the Flywheel sidecar if mounted."""
+    termination = Path("/flywheel/termination")
+    if termination.parent.exists():
+        termination.write_text(reason, encoding="utf-8")
+
+
 def write_manifest(output_dir, artifacts):
     """Write output_manifest.json declaring produced artifacts."""
     manifest = {"artifacts": artifacts}
@@ -148,6 +155,7 @@ def main():
 
     # Print summary to stdout (per-episode fights_won stays in scores.json only).
     print_summary(stats)
+    write_flywheel_termination("normal")
 
 
 if __name__ == "__main__":

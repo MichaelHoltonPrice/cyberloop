@@ -1,6 +1,7 @@
 # Evaluates an RL checkpoint against the Decker gauntlet by
 # running parallel greedy episodes.  One container per
-# evaluation; the substrate launches it via ``ProcessExitExecutor``.
+# evaluation; ad hoc execution goes through Flywheel's canonical
+# ephemeral container pipeline.
 #
 # I/O for one execution:
 #   /input/checkpoint/checkpoint.pt    — model to evaluate
@@ -15,8 +16,8 @@
 # ``--output-dir`` with the substrate-mount paths above, so
 # patterns only need to declare logical eval knobs in their
 # ``overrides:`` map (subclass, episodes, backend, ...).  Each
-# ``key: value`` becomes ``--key value`` argv via
-# ``ProcessExitExecutor``'s convention; underscores in keys
+# ``key: value`` becomes ``--key value`` argv via the one-shot
+# container executor convention; underscores in keys
 # render as hyphens.
 name: Eval
 runner: container

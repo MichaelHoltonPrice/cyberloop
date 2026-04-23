@@ -43,6 +43,13 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 
+def write_flywheel_termination(reason: str = "normal") -> None:
+    """Announce successful completion to the Flywheel sidecar if mounted."""
+    termination = Path("/flywheel/termination")
+    if termination.parent.exists():
+        termination.write_text(reason, encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Constants (imported inside functions for spawn compatibility)
 # ---------------------------------------------------------------------------
@@ -1325,6 +1332,7 @@ def main():
     manifest_path = checkpoint_root / "output_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2))
     print(f"  Manifest: {manifest_path}")
+    write_flywheel_termination("normal")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,58 @@
+# Multi-stage build for the cyberloop RL training block.
+#
+# Build from the cyberloop root:
+#   docker build -f docker/Dockerfile.train -t cyberloop-train:latest .
+#
+# The image entrypoint pre-fills ``--checkpoint-dir`` with the
+# Flywheel output mount.  Training knobs are passed as extra args
+# through ``flywheel run block ... -- <args>``.
+
+# ---------------------------------------------------------------------------
+# Stage 1: build decker_pyenv
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl build-essential pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN pip install --no-cache-dir maturin
+
+COPY Cargo.toml /build/
+COPY crates/engine/ /build/crates/engine/
+COPY crates/content/ /build/crates/content/
+COPY crates/gauntlet/ /build/crates/gauntlet/
+COPY crates/pyenv/ /build/crates/pyenv/
+
+WORKDIR /build/crates/pyenv
+RUN maturin build --release --interpreter python3.12 -o /build/wheels/
+
+# ---------------------------------------------------------------------------
+# Stage 2: runtime
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim
+
+COPY --from=builder /build/wheels/*.whl /tmp/wheels/
+RUN pip install --no-cache-dir /tmp/wheels/*.whl && rm -rf /tmp/wheels
+
+RUN pip install --no-cache-dir numpy gymnasium torch
+
+# Avoid multiplying CPU thread pools across actors.
+ENV OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+
+COPY scripts/train_impala.py /app/scripts/train_impala.py
+COPY scripts/eval_common.py /app/scripts/eval_common.py
+COPY scripts/eval_io.py /app/scripts/eval_io.py
+COPY scripts/numpy_eval.py /app/scripts/numpy_eval.py
+COPY scripts/model.py /app/scripts/model.py
+COPY scripts/strategy.py /app/scripts/strategy.py
+COPY scripts/decker_env.py /app/scripts/decker_env.py
+
+WORKDIR /app/scripts
+
+ENTRYPOINT ["python", "train_impala.py", \
+            "--checkpoint-dir", "/output/checkpoint"]

@@ -11,4 +11,5 @@ artifacts:
     kind: copy
 
 blocks:
+  - Train
   - Eval

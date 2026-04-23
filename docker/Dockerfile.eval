@@ -6,12 +6,11 @@
 # Build from the cyberloop root:
 #   docker build -f docker/Dockerfile.eval -t cyberloop-eval:latest .
 #
-# The substrate's ProcessExitExecutor invokes this image with
-# input/output bind mounts at ``/input/<slot>`` and
-# ``/output/<slot>``.  The ENTRYPOINT pre-fills ``--checkpoint``
-# and ``--output-dir`` with the substrate-side paths so patterns
-# only declare logical knobs (subclass, episodes, ...) in their
-# ``overrides:`` map.
+# Flywheel invokes this image with input/output bind mounts at
+# ``/input/<slot>`` and ``/output/<slot>``.  The ENTRYPOINT
+# pre-fills ``--checkpoint`` and ``--output-dir`` with the
+# substrate-side paths so patterns only declare logical knobs
+# (subclass, episodes, ...) in their ``overrides:`` map.
 #
 # Quick standalone smoke test (outside flywheel):
 #   docker run --rm \
