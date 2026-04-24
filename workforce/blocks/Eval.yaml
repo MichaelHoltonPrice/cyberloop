@@ -5,8 +5,7 @@
 #
 # I/O for one execution:
 #   /input/checkpoint/checkpoint.pt    — model to evaluate
-#   /input/checkpoint/config.json      — model_kwargs sidecar (optional)
-#   /input/checkpoint/version.json     — engine-version sidecar (optional)
+#   /input/checkpoint/run.json         — checkpoint metadata
 #   /output/score/scores.json          — per-episode + summary stats
 #   /output/score/output_manifest.json — informational; the substrate
 #                                        sweeps /output/score/* by

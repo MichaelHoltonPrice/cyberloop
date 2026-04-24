@@ -1,2 +1,3 @@
 foundry_dir: foundry
 project_hooks: cyberloop.project:ProjectHooks
+artifact_validators: cyberloop.artifact_validators:build_registry

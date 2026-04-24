@@ -16,7 +16,7 @@
 #   docker run --rm \
 #     -v /path/to/checkpoint_dir:/input/checkpoint:ro \
 #     -v /path/to/score_out:/output/score \
-#     cyberloop-eval:latest --subclass dueling --episodes 100
+#     cyberloop-eval:latest --episodes 100
 
 # ---------------------------------------------------------------------------
 # Stage 1: build decker_pyenv

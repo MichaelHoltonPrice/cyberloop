@@ -27,6 +27,7 @@ import argparse
 import csv
 import json
 import os
+import shutil
 import sys
 import time
 import uuid
@@ -48,6 +49,54 @@ def write_flywheel_termination(reason: str = "normal") -> None:
     termination = Path("/flywheel/termination")
     if termination.parent.exists():
         termination.write_text(reason, encoding="utf-8")
+
+
+def _publish_checkpoint_artifact(
+    *,
+    checkpoint_root: Path,
+    source_model: Path,
+    stage: str,
+    timesteps: int,
+    args: argparse.Namespace,
+) -> None:
+    """Write the flat checkpoint artifact contract under checkpoint_root."""
+    checkpoint_root.mkdir(parents=True, exist_ok=True)
+    canonical_model = checkpoint_root / "checkpoint.pt"
+    shutil.copy2(source_model, canonical_model)
+
+    training_log = source_model.parent / "training_log.csv"
+    if training_log.exists():
+        shutil.copy2(training_log, checkpoint_root / "training_log.csv")
+
+    run_info = {
+        "schema_version": 1,
+        "artifact_type": "cyberloop.checkpoint",
+        "model_path": "checkpoint.pt",
+        "stage": stage,
+        "subclass": args.subclass,
+        "race": args.race,
+        "synergy_group": args.synergy_group,
+        "seed": args.seed,
+        "timesteps": timesteps,
+    }
+    (checkpoint_root / "run.json").write_text(
+        json.dumps(run_info, indent=2), encoding="utf-8")
+
+    manifest = {
+        "artifacts": [{
+            "type": "checkpoint",
+            "path": "checkpoint.pt",
+            "stage": stage,
+            "metadata": {
+                "subclass": args.subclass,
+                "seed": args.seed,
+                "schema_version": 1,
+            },
+        }]
+    }
+    manifest_path = checkpoint_root / "output_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(f"  Manifest: {manifest_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -1241,6 +1290,7 @@ def main():
 
     best_combat_path = None
     best_picks_path = None
+    produced_checkpoints: list[tuple[str, Path, int]] = []
 
     if args.shared:
         # Shared mode: train on all phases simultaneously.
@@ -1257,6 +1307,8 @@ def main():
             model_kwargs=model_kwargs,
             deadline=deadline,
         )
+        produced_checkpoints.append(
+            ("shared", best_combat_path, args.shared_timesteps))
     else:
         run_combat = not args.curation_only
         run_picks = not args.combat_only
@@ -1277,6 +1329,8 @@ def main():
                 model_kwargs=model_kwargs,
                 deadline=deadline,
             )
+            produced_checkpoints.append(
+                ("combat", best_combat_path, args.combat_timesteps))
 
         # Stage 2: Curation (reward picks, deck swaps, rebuilds).
         if run_picks:
@@ -1299,6 +1353,8 @@ def main():
                     model_kwargs=model_kwargs,
                     deadline=deadline,
                 )
+                produced_checkpoints.append(
+                    ("curation", best_picks_path, args.curation_timesteps))
 
     # Summary.
     print("\n" + "=" * 60)
@@ -1308,30 +1364,19 @@ def main():
     if best_picks_path:
         print(f"  Final model:  {best_picks_path}")
 
-    # Write output manifest at checkpoint_dir level (not the nested
-    # subdirectory). Flywheel mounts checkpoint_dir as /output, so the
-    # manifest must be at /output/output_manifest.json with paths
-    # relative to /output.
     checkpoint_root = Path(args.checkpoint_dir)
-    artifacts = []
-    if best_combat_path and best_combat_path.exists():
-        artifacts.append({
-            "type": "checkpoint",
-            "path": str(best_combat_path.relative_to(checkpoint_root)),
-            "stage": "combat",
-            "metadata": {"subclass": args.subclass, "seed": args.seed},
-        })
-    if best_picks_path and best_picks_path.exists():
-        artifacts.append({
-            "type": "checkpoint",
-            "path": str(best_picks_path.relative_to(checkpoint_root)),
-            "stage": "curation",
-            "metadata": {"subclass": args.subclass, "seed": args.seed},
-        })
-    manifest = {"artifacts": artifacts}
-    manifest_path = checkpoint_root / "output_manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2))
-    print(f"  Manifest: {manifest_path}")
+    if not produced_checkpoints:
+        print("ERROR: no checkpoint was produced", file=sys.stderr)
+        sys.exit(1)
+    stage, selected_model, timesteps = produced_checkpoints[-1]
+    _publish_checkpoint_artifact(
+        checkpoint_root=checkpoint_root,
+        source_model=selected_model,
+        stage=stage,
+        timesteps=timesteps,
+        args=args,
+    )
+    shutil.rmtree(parent_dir, ignore_errors=True)
     write_flywheel_termination("normal")
 
 

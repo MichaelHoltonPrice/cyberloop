@@ -4,7 +4,7 @@
 # ``/output/checkpoint``.  Ad hoc runs pass training knobs as
 # trailing args, for example:
 #
-#   flywheel run block <ws> Train cyberloop -- --subclass dueling --combat-only
+#   flywheel run block --workspace <ws> --block Train --template cyberloop -- --subclass dueling --combat-only
 #
 # If a prior checkpoint is bound, callers may pass
 # ``--init-model /input/checkpoint/checkpoint.pt``.

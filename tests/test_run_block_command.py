@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -33,8 +34,24 @@ def test_train_runs_through_base_run_block_cli(
         (checkpoint_dir / "checkpoint.pt").write_text(
             "weights", encoding="utf-8",
         )
+        (checkpoint_dir / "run.json").write_text(json.dumps({
+            "schema_version": 1,
+            "artifact_type": "cyberloop.checkpoint",
+            "model_path": "checkpoint.pt",
+            "stage": "combat",
+            "subclass": "dueling",
+            "race": "human",
+            "synergy_group": None,
+            "seed": 1,
+            "timesteps": 10,
+        }), encoding="utf-8")
         (checkpoint_dir / "output_manifest.json").write_text(
-            '{"artifacts": [{"type": "checkpoint"}]}',
+            json.dumps({
+                "artifacts": [{
+                    "type": "checkpoint",
+                    "path": "checkpoint.pt",
+                }],
+            }),
             encoding="utf-8",
         )
         return ContainerResult(exit_code=0, elapsed_s=1.25)
@@ -71,6 +88,8 @@ def test_train_runs_through_base_run_block_cli(
     checkpoint_id = execution.output_bindings["checkpoint"]
     checkpoint = reloaded.path / "artifacts" / checkpoint_id
     assert (checkpoint / "checkpoint.pt").read_text() == "weights"
+    assert json.loads((checkpoint / "run.json").read_text())[
+        "artifact_type"] == "cyberloop.checkpoint"
     assert seen["image"] == "cyberloop-train:latest"
     assert seen["args"] == ["--example-flag", "example-value"]
 

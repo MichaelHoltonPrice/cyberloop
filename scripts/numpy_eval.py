@@ -526,6 +526,7 @@ def evaluate_parallel(
     fights = []
     total_steps = 0
     timed_out = 0
+    errors = 0
     t0 = time.time()
 
     with ProcessPoolExecutor(
@@ -551,6 +552,7 @@ def evaluate_parallel(
             except Exception as e:
                 print(f"  Episode error: {e}", file=sys.stderr)
                 fights.append(0)
+                errors += 1
 
     elapsed = time.time() - t0
     fights_arr = np.array(fights)
@@ -567,4 +569,5 @@ def evaluate_parallel(
         "total_steps": total_steps,
         "elapsed_s": round(elapsed, 1),
         "timed_out": timed_out,
+        "errors": errors,
     }

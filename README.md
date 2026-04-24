@@ -67,11 +67,13 @@ deferred-pattern error. Train and Eval can be run ad hoc through Flywheel's
 canonical one-shot container pipeline. The currently supported surface:
 
 - `workforce/blocks/Train.yaml` ? runs `train_impala.py` and writes a
-  `checkpoint` artifact.
+  flat `checkpoint` artifact with `checkpoint.pt` and `run.json`.
 - `workforce/blocks/Eval.yaml` ? runs `eval_checkpoint.py` against a
   pre-staged checkpoint artifact and writes a `score` artifact.
 - `foundry/templates/cyberloop.yaml` ? declares the `checkpoint` and
   `score` artifact contract.
+- `cyberloop.artifact_validators` ? validates checkpoint and score
+  artifacts through Flywheel's `artifact_validators` hook.
 
 `patterns/eval_only.yaml` is retained as deferred pattern metadata; it is not
 currently invokable through `cyberloop.project:ProjectHooks`.

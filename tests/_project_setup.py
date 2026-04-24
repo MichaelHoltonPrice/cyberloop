@@ -91,6 +91,7 @@ def build_project(
     (project / "flywheel.yaml").write_text(
         "foundry_dir: foundry\n"
         "project_hooks: cyberloop.project:ProjectHooks\n"
+        "artifact_validators: cyberloop.artifact_validators:build_registry\n"
     )
 
     templates = project / "foundry" / "templates"

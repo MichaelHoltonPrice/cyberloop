@@ -12,14 +12,14 @@ Supports two backends:
     torch  — original PyTorch inference (for validation/debugging)
 
 Container conventions:
-    /input/checkpoint.pt   — the checkpoint to evaluate (mounted)
-    /output/scores.json    — evaluation results
-    /output/output_manifest.json — declares produced artifacts
+    /input/checkpoint/checkpoint.pt — the checkpoint to evaluate
+    /input/checkpoint/run.json      — checkpoint metadata
+    /output/score/scores.json       — evaluation results
+    /output/score/output_manifest.json — declares produced artifacts
 
 Usage:
     python eval_checkpoint.py \
-        --checkpoint /input/checkpoint.pt \
-        --subclass dueling \
+        --checkpoint /input/checkpoint/checkpoint.pt \
         --episodes 4000 \
         --output-dir /output
 """
@@ -37,6 +37,12 @@ if _scripts_dir not in sys.path:
 from eval_io import print_summary, write_scores
 
 
+def _fail(message: str) -> None:
+    """Print a user-facing error and exit nonzero."""
+    print(f"ERROR: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
 def write_flywheel_termination(reason: str = "normal") -> None:
     """Announce successful completion to the Flywheel sidecar if mounted."""
     termination = Path("/flywheel/termination")
@@ -51,9 +57,34 @@ def write_manifest(output_dir, artifacts):
         json.dumps(manifest, indent=2))
 
 
+def load_checkpoint_metadata(checkpoint_path: Path) -> dict:
+    """Load and validate the Cyberloop checkpoint artifact metadata."""
+    if not checkpoint_path.exists():
+        _fail(f"checkpoint file does not exist: {checkpoint_path}")
+    metadata_path = checkpoint_path.parent / "run.json"
+    if not metadata_path.exists():
+        _fail(f"checkpoint metadata does not exist: {metadata_path}")
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        _fail(f"checkpoint metadata is invalid JSON: {exc}")
+    if metadata.get("schema_version") != 1:
+        _fail("checkpoint run.json must have schema_version 1")
+    if metadata.get("artifact_type") != "cyberloop.checkpoint":
+        _fail("checkpoint run.json has wrong artifact_type")
+    if metadata.get("model_path") != checkpoint_path.name:
+        _fail(
+            "checkpoint run.json model_path must match "
+            f"{checkpoint_path.name!r}")
+    subclass = metadata.get("subclass")
+    if not isinstance(subclass, str) or not subclass:
+        _fail("checkpoint run.json must declare a non-empty subclass")
+    return metadata
+
+
 def _run_numpy(args, dims, output_dir):
     """Run evaluation using numpy backend (no torch needed)."""
-    from numpy_eval import evaluate_parallel, resolve_dims
+    from numpy_eval import evaluate_parallel
 
     stats = evaluate_parallel(
         checkpoint_path=args.checkpoint,
@@ -111,7 +142,7 @@ def main():
     parser.add_argument(
         "--checkpoint", required=True,
         help="Path to checkpoint .pt file")
-    parser.add_argument("--subclass", required=True)
+    parser.add_argument("--subclass", default=None)
     parser.add_argument("--episodes", type=int, default=4000)
     parser.add_argument("--race", default="human")
     parser.add_argument("--synergy-group", default=None)
@@ -125,9 +156,21 @@ def main():
         "--output-dir", default="/output",
         help="Directory for output files")
     args = parser.parse_args()
+    if args.episodes <= 0:
+        _fail("--episodes must be positive")
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    checkpoint_path = Path(args.checkpoint)
+    checkpoint_metadata = load_checkpoint_metadata(checkpoint_path)
+    checkpoint_subclass = checkpoint_metadata["subclass"]
+    if args.subclass is None:
+        args.subclass = checkpoint_subclass
+    elif args.subclass != checkpoint_subclass:
+        _fail(
+            f"requested subclass {args.subclass!r} does not match "
+            f"checkpoint subclass {checkpoint_subclass!r}")
 
     # Resolve dims from game engine (works with either backend).
     from numpy_eval import resolve_dims
@@ -146,11 +189,12 @@ def main():
     # Write manifest.
     write_manifest(output_dir, [
         {"type": "score", "path": "scores.json",
-         "metadata": {
-             "mean": stats["mean"],
-             "median": stats["median"],
-             "episodes": stats["episodes"],
-         }},
+             "metadata": {
+                 "mean": stats["mean"],
+                 "median": stats["median"],
+                 "episodes": stats["episodes"],
+                 "errors": stats.get("errors", 0),
+             }},
     ])
 
     # Print summary to stdout (per-episode fights_won stays in scores.json only).
