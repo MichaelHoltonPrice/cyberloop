@@ -1,0 +1,29 @@
+name: train_eval
+steps:
+  - name: train
+    cohort:
+      min_successes: all
+      members:
+        - name: train_dueling
+          block: Train
+          args:
+            - --subclass
+            - dueling
+            - --combat-only
+
+  - name: eval
+    cohort:
+      min_successes: all
+      members:
+        - name: eval_dueling
+          block: Eval
+          inputs:
+            checkpoint:
+              from_step: train
+              member: train_dueling
+              output: checkpoint
+          args:
+            - --episodes
+            - "2"
+            - --backend
+            - numpy

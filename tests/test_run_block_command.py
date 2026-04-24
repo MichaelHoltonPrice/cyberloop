@@ -63,7 +63,7 @@ def test_train_runs_through_base_run_block_cli(
             side_effect=fake_run_container,
         ),
         patch(
-            "flywheel.cli.load_project_hooks_class",
+            "flywheel.project_hooks.load_project_hooks_class",
             side_effect=AssertionError(
                 "run block must not load project hooks"),
         ),
