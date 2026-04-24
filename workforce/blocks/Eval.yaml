@@ -1,7 +1,7 @@
 # Evaluates an RL checkpoint against the Decker gauntlet by
 # running parallel greedy episodes.  One container per
 # evaluation; ad hoc execution goes through Flywheel's canonical
-# ephemeral container pipeline.
+# one-shot container pipeline.
 #
 # I/O for one execution:
 #   /input/checkpoint/checkpoint.pt    — model to evaluate

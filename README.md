@@ -60,24 +60,21 @@ cd ../..
 
 ## Orchestration
 
-Pattern runs are driven by [Flywheel](../flywheel/), the sibling substrate that
-launches block containers and stitches their I/O through workspace artifacts.
-`flywheel.yaml` points at `cyberloop.project:ProjectHooks`, which hands the
-substrate a single one-shot container executor for pattern runs.  Ad hoc block
-execution goes through Flywheel's canonical ephemeral pipeline.  The
-currently-shipping surface:
+Pattern runs are deferred while Flywheel's pattern surface is rebuilt on the
+canonical block-execution pipeline. `flywheel.yaml` still points at
+`cyberloop.project:ProjectHooks`, but invoking that hook raises a clear
+deferred-pattern error. Train and Eval can be run ad hoc through Flywheel's
+canonical one-shot container pipeline. The currently supported surface:
 
-- `workforce/blocks/Train.yaml` — runs `train_impala.py` and writes a
+- `workforce/blocks/Train.yaml` ? runs `train_impala.py` and writes a
   `checkpoint` artifact.
-- `workforce/blocks/Eval.yaml` — runs `eval_checkpoint.py` against a
+- `workforce/blocks/Eval.yaml` ? runs `eval_checkpoint.py` against a
   pre-staged checkpoint artifact and writes a `score` artifact.
-- `foundry/templates/cyberloop.yaml` — declares the `checkpoint` and
-  `score` artifact contract every cyberloop pattern shares.
-- `patterns/eval_only.yaml` — single-instance pattern that runs `Eval`
-  once and ends the run when the container exits.
+- `foundry/templates/cyberloop.yaml` ? declares the `checkpoint` and
+  `score` artifact contract.
 
-The alternating train-eval pattern lands in a follow-up commit.  See the
-flywheel repo for details on creating workspaces and running patterns.
+`patterns/eval_only.yaml` is retained as deferred pattern metadata; it is not
+currently invokable through `cyberloop.project:ProjectHooks`.
 
 Ad hoc training uses the base Flywheel block command from the cyberloop root:
 

@@ -65,7 +65,7 @@ def test_train_runs_through_base_run_block_cli(
     assert execution.block_name == "Train"
     assert execution.status == "succeeded"
     assert execution.termination_reason == "normal"
-    assert execution.runner == "container_ephemeral"
+    assert execution.runner == "container_one_shot"
     assert set(execution.output_bindings) == {"checkpoint"}
 
     checkpoint_id = execution.output_bindings["checkpoint"]

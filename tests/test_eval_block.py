@@ -73,7 +73,7 @@ class TestEvalBlockYaml:
         assert score_out.container_path == "/output/score"
 
     def test_no_post_check(self, project_setup):
-        # The ad hoc ephemeral-container path does not invoke ``post_check``.
+        # The current one-shot container path does not invoke ``post_check``.
         # Declaring one on Eval would silently no-op, which would
         # be confusing; assert the absence so a future addition has
         # to update this test deliberately.
