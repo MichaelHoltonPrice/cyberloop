@@ -70,10 +70,11 @@ The currently supported surface:
   pre-staged checkpoint artifact and writes a `score` artifact.
 - `foundry/templates/blocks/EvalBot.yaml` runs `eval_bot.py` against a
   Python `bot.py` artifact and writes a `score` artifact.
-- `foundry/templates/blocks/ImproveBot.yaml` runs the Claude battery image
-  as an ordinary block and routes `eval_requested` to `EvalBot`.
+- `foundry/templates/blocks/ImproveBot.yaml` runs a Cyberloop image
+  derived from Flywheel's Claude battery and routes `eval_requested`
+  to `EvalBot`.
 - `foundry/templates/workspaces/cyberloop.yaml` declares the
-  `checkpoint`, `score`, `bot`, and `prompt` artifact contract.
+  `checkpoint`, `score`, and `bot` artifact contract.
 - `foundry/templates/patterns/train_eval.yaml` declares the canonical
   Train to Eval pattern.
 - `foundry/templates/patterns/improve_bot.yaml` declares the agent-improves-bot
@@ -81,11 +82,18 @@ The currently supported surface:
 - `cyberloop.artifact_validators` validates checkpoint and score
   artifacts through Flywheel's `artifact_validators` hook.
 
-Before the first `ImproveBot` run, import the baseline bot artifact:
+Build the Claude battery image, then the Cyberloop image that bakes
+in the ImproveBot prompt:
 
 ```bash
-flywheel import artifact --workspace foundry/workspaces/<workspace> --name bot --from foundry/templates/assets/bots/baseline
+docker build -f ../flywheel/batteries/claude/Dockerfile.claude -t flywheel-claude:latest ../flywheel/batteries/claude
+docker build -f docker/Dockerfile.improve-bot-agent -t cyberloop-improve-bot-agent:latest .
 ```
+
+The current ImproveBot block can start without a prior `bot`
+artifact. A checked-in starter bot may become a template-declared
+initial input in future work; it should not require a manual import
+step for the normal pattern.
 
 Ad hoc training uses the base Flywheel block command from the cyberloop root:
 

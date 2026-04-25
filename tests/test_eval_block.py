@@ -95,7 +95,6 @@ class TestCyberloopTemplate:
             "checkpoint": "copy",
             "score": "copy",
             "bot": "copy",
-            "prompt": "copy",
         }
 
     def test_eval_block_in_template(self, project_setup):
@@ -126,9 +125,10 @@ class TestCyberloopTemplate:
     def test_improve_bot_declares_eval_invocation(self, project_setup):
         _, template, _ = project_setup
         improve = next(b for b in template.blocks if b.name == "ImproveBot")
-        assert improve.image == "flywheel-claude:latest"
+        assert improve.image == "cyberloop-improve-bot-agent:latest"
         assert improve.state == "managed"
-        assert [slot.name for slot in improve.inputs] == ["prompt", "bot"]
+        assert [slot.name for slot in improve.inputs] == ["bot"]
+        assert improve.inputs[0].optional is True
         assert [slot.name for slot in improve.outputs_for("eval_requested")] == [
             "bot"]
         assert [slot.name for slot in improve.outputs_for("done")] == ["bot"]
@@ -141,6 +141,17 @@ class TestCyberloopTemplate:
         assert eval_bot.docker_args == ["--entrypoint", "python"]
         assert [slot.name for slot in eval_bot.inputs] == ["bot"]
         assert eval_bot.outputs_for("normal")[0].name == "score"
+
+    def test_improve_bot_agent_image_bakes_prompt(self):
+        dockerfile = (
+            CYBERLOOP_ROOT / "docker" / "Dockerfile.improve-bot-agent")
+        text = dockerfile.read_text(encoding="utf-8")
+
+        assert "FROM flywheel-claude:latest" in text
+        assert (
+            "COPY foundry/templates/assets/improve_bot_prompt/prompt.md "
+            "/app/agent/prompt.md"
+        ) in text
 
 
 
@@ -171,4 +182,4 @@ class TestProductionFilesParseAgainstRegistry:
         assert "EvalBot" in [b.name for b in template.blocks]
         assert "ImproveBot" in [b.name for b in template.blocks]
         assert {a.name for a in template.artifacts} == {
-            "checkpoint", "score", "bot", "prompt"}
+            "checkpoint", "score", "bot"}

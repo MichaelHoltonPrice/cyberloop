@@ -1,0 +1,3 @@
+FROM flywheel-claude:latest
+
+COPY foundry/templates/assets/improve_bot_prompt/prompt.md /app/agent/prompt.md

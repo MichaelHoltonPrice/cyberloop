@@ -39,8 +39,6 @@ artifacts:
     kind: copy
   - name: bot
     kind: copy
-  - name: prompt
-    kind: copy
 
 blocks:
   - Train
@@ -98,7 +96,7 @@ outputs:
 IMPROVE_BOT_BLOCK_YAML = """\
 name: ImproveBot
 runner: container
-image: flywheel-claude:latest
+image: cyberloop-improve-bot-agent:latest
 docker_args:
   - -v
   - claude-auth:/home/claude/.claude:rw
@@ -106,10 +104,9 @@ env:
   MAX_TURNS: "20"
 state: managed
 inputs:
-  - name: prompt
-    container_path: /prompt
   - name: bot
     container_path: /input/bot
+    optional: true
 outputs:
   eval_requested:
     - name: bot

@@ -11,8 +11,6 @@ artifacts:
     kind: copy
   - name: bot
     kind: copy
-  - name: prompt
-    kind: copy
 
 blocks:
   - Train
