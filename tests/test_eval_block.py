@@ -50,7 +50,7 @@ class TestEvalBlockYaml:
         # ``workspace_persistent`` would silently change the
         # executor-selection branch in production hooks.
         assert eval_def.lifecycle == "one_shot"
-        assert eval_def.state is False
+        assert eval_def.state == "none"
 
     def test_input_and_output_slots(self, project_setup):
         _, _, project = project_setup
@@ -91,12 +91,17 @@ class TestCyberloopTemplate:
     def test_artifact_contract(self, project_setup):
         _, template, _ = project_setup
         kinds = {a.name: a.kind for a in template.artifacts}
-        assert kinds == {"checkpoint": "copy", "score": "copy"}
+        assert kinds == {
+            "checkpoint": "copy",
+            "score": "copy",
+            "bot": "copy",
+            "prompt": "copy",
+        }
 
     def test_eval_block_in_template(self, project_setup):
         _, template, _ = project_setup
         block_names = [b.name for b in template.blocks]
-        assert block_names == ["Train", "Eval"]
+        assert block_names == ["Train", "Eval", "EvalBot", "ImproveBot"]
 
     def test_train_block_in_template(self, project_setup):
         _, template, _ = project_setup
@@ -118,6 +123,25 @@ class TestCyberloopTemplate:
         assert checkpoint_out.name == "checkpoint"
         assert checkpoint_out.container_path == "/output/checkpoint"
 
+    def test_improve_bot_declares_eval_invocation(self, project_setup):
+        _, template, _ = project_setup
+        improve = next(b for b in template.blocks if b.name == "ImproveBot")
+        assert improve.image == "flywheel-claude:latest"
+        assert improve.state == "managed"
+        assert [slot.name for slot in improve.inputs] == ["prompt", "bot"]
+        assert [slot.name for slot in improve.outputs_for("eval_requested")] == [
+            "bot"]
+        assert [slot.name for slot in improve.outputs_for("done")] == ["bot"]
+        invocation = improve.on_termination["eval_requested"][0]
+        assert invocation.block == "EvalBot"
+        assert invocation.bind["bot"].parent_output == "bot"
+        assert "--episodes" in invocation.args
+
+        eval_bot = next(b for b in template.blocks if b.name == "EvalBot")
+        assert eval_bot.docker_args == ["--entrypoint", "python"]
+        assert [slot.name for slot in eval_bot.inputs] == ["bot"]
+        assert eval_bot.outputs_for("normal")[0].name == "score"
+
 
 
 class TestProductionFilesParseAgainstRegistry:
@@ -135,7 +159,8 @@ class TestProductionFilesParseAgainstRegistry:
 
     def test_block_templates_directory_loads(self):
         registry = BlockRegistry.from_directory(self.BLOCKS_DIR)
-        assert {"Train", "Eval"}.issubset(set(registry.names()))
+        assert {"Train", "Eval", "EvalBot", "ImproveBot"}.issubset(
+            set(registry.names()))
 
     def test_template_loads_and_resolves_eval(self):
         registry = BlockRegistry.from_directory(self.BLOCKS_DIR)
@@ -143,5 +168,7 @@ class TestProductionFilesParseAgainstRegistry:
             self.TEMPLATE_PATH, block_registry=registry)
         assert "Eval" in [b.name for b in template.blocks]
         assert "Train" in [b.name for b in template.blocks]
+        assert "EvalBot" in [b.name for b in template.blocks]
+        assert "ImproveBot" in [b.name for b in template.blocks]
         assert {a.name for a in template.artifacts} == {
-            "checkpoint", "score"}
+            "checkpoint", "score", "bot", "prompt"}

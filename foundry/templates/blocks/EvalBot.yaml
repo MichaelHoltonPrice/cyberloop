@@ -1,0 +1,18 @@
+# Evaluates a Python bot.py by running gauntlet episodes.
+#
+# Intended primarily as a child block invoked by ImproveBot when
+# ImproveBot announces the eval_requested termination reason.  The
+# caller supplies the bot artifact and argv selecting subclass /
+# episode count.
+name: EvalBot
+runner: container
+image: cyberloop-eval:latest
+docker_args:
+  - --entrypoint
+  - python
+inputs:
+  - name: bot
+    container_path: /input/bot
+outputs:
+  - name: score
+    container_path: /output/score

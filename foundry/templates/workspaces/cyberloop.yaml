@@ -9,7 +9,13 @@ artifacts:
     kind: copy
   - name: score
     kind: copy
+  - name: bot
+    kind: copy
+  - name: prompt
+    kind: copy
 
 blocks:
   - Train
   - Eval
+  - EvalBot
+  - ImproveBot

@@ -1,0 +1,41 @@
+# Runs a Claude agent that edits bot.py and chooses whether to
+# request EvalBot by announcing a project termination reason.
+name: ImproveBot
+runner: container
+image: flywheel-claude:latest
+docker_args:
+  - -v
+  - claude-auth:/home/claude/.claude:rw
+env:
+  MAX_TURNS: "20"
+state: managed
+inputs:
+  - name: prompt
+    container_path: /prompt
+  - name: bot
+    container_path: /input/bot
+outputs:
+  eval_requested:
+    - name: bot
+      container_path: /output/bot
+  done:
+    - name: bot
+      container_path: /output/bot
+on_termination:
+  eval_requested:
+    invoke:
+      - block: EvalBot
+        bind:
+          bot: bot
+        args:
+          - /app/scripts/eval_bot.py
+          - --bot
+          - /input/bot/bot.py
+          - --output-dir
+          - /output/score
+          - --subclass
+          - dueling
+          - --episodes
+          - "200"
+          - --n-workers
+          - "1"

@@ -57,16 +57,9 @@ def test_train_runs_through_base_run_block_cli(
         return ContainerResult(exit_code=0, elapsed_s=1.25)
 
     monkeypatch.chdir(project)
-    with (
-        patch(
-            "flywheel.execution.run_container",
-            side_effect=fake_run_container,
-        ),
-        patch(
-            "flywheel.project_hooks.load_project_hooks_class",
-            side_effect=AssertionError(
-                "run block must not load project hooks"),
-        ),
+    with patch(
+        "flywheel.execution.run_container",
+        side_effect=fake_run_container,
     ):
         main([
             "run", "block",

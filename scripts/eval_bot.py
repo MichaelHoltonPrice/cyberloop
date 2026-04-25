@@ -19,6 +19,8 @@ Usage:
 """
 
 import argparse
+import json
+import random
 import sys
 from pathlib import Path
 
@@ -27,8 +29,8 @@ _scripts_dir = str(Path(__file__).resolve().parent)
 if _scripts_dir not in sys.path:
     sys.path.insert(0, _scripts_dir)
 
-from eval_io import print_summary, write_scores
-from play_bot import play_parallel
+from eval_io import print_summary, write_scores  # noqa: E402
+from play_bot import play_parallel  # noqa: E402
 
 
 def main():
@@ -52,7 +54,6 @@ def main():
 
     output_dir = Path(args.output_dir)
 
-    import random
     seed = args.seed if args.seed is not None else random.randint(0, 2**31)
 
     stats = play_parallel(
@@ -71,6 +72,12 @@ def main():
 
     # Write scores (even for aborted evals, for debugging).
     write_scores(output_dir, stats)
+    (output_dir / "output_manifest.json").write_text(json.dumps({
+        "artifacts": [{
+            "type": "score",
+            "path": "scores.json",
+        }],
+    }, indent=2), encoding="utf-8")
     print_summary(stats)
 
     # If the eval was aborted (speed screen or timeout gate),

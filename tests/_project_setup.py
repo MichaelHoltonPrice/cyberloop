@@ -37,10 +37,16 @@ artifacts:
     kind: copy
   - name: score
     kind: copy
+  - name: bot
+    kind: copy
+  - name: prompt
+    kind: copy
 
 blocks:
   - Train
   - Eval
+  - EvalBot
+  - ImproveBot
 """
 
 TRAIN_BLOCK_YAML = """\
@@ -74,6 +80,63 @@ outputs:
     container_path: /output/score
 """
 
+EVAL_BOT_BLOCK_YAML = """\
+name: EvalBot
+runner: container
+image: cyberloop-eval:latest
+docker_args:
+  - --entrypoint
+  - python
+inputs:
+  - name: bot
+    container_path: /input/bot
+outputs:
+  - name: score
+    container_path: /output/score
+"""
+
+IMPROVE_BOT_BLOCK_YAML = """\
+name: ImproveBot
+runner: container
+image: flywheel-claude:latest
+docker_args:
+  - -v
+  - claude-auth:/home/claude/.claude:rw
+env:
+  MAX_TURNS: "20"
+state: managed
+inputs:
+  - name: prompt
+    container_path: /prompt
+  - name: bot
+    container_path: /input/bot
+outputs:
+  eval_requested:
+    - name: bot
+      container_path: /output/bot
+  done:
+    - name: bot
+      container_path: /output/bot
+on_termination:
+  eval_requested:
+    invoke:
+      - block: EvalBot
+        bind:
+          bot: bot
+        args:
+          - /app/scripts/eval_bot.py
+          - --bot
+          - /input/bot/bot.py
+          - --output-dir
+          - /output/score
+          - --subclass
+          - dueling
+          - --episodes
+          - "200"
+          - --n-workers
+          - "1"
+"""
+
 
 def build_project(
         tmp_path: Path) -> tuple[Workspace, Template, Path]:
@@ -92,7 +155,6 @@ def build_project(
     project.mkdir()
     (project / "flywheel.yaml").write_text(
         "foundry_dir: foundry\n"
-        "project_hooks: cyberloop.project:ProjectHooks\n"
         "artifact_validators: cyberloop.artifact_validators:build_registry\n"
     )
 
@@ -104,6 +166,8 @@ def build_project(
     blocks_dir.mkdir(parents=True)
     (blocks_dir / "Train.yaml").write_text(TRAIN_BLOCK_YAML)
     (blocks_dir / "Eval.yaml").write_text(EVAL_BLOCK_YAML)
+    (blocks_dir / "EvalBot.yaml").write_text(EVAL_BOT_BLOCK_YAML)
+    (blocks_dir / "ImproveBot.yaml").write_text(IMPROVE_BOT_BLOCK_YAML)
     registry = BlockRegistry.from_directory(blocks_dir)
 
     workspaces = project / "foundry" / "workspaces"

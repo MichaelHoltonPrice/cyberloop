@@ -66,10 +66,13 @@ RUN pip install --no-cache-dir torch \
 ENV OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 
 COPY scripts/eval_common.py /app/scripts/eval_common.py
+COPY scripts/eval_bot.py /app/scripts/eval_bot.py
 COPY scripts/eval_checkpoint.py /app/scripts/eval_checkpoint.py
 COPY scripts/eval_io.py /app/scripts/eval_io.py
 COPY scripts/numpy_eval.py /app/scripts/numpy_eval.py
 COPY scripts/model.py /app/scripts/model.py
+COPY scripts/play_bot.py /app/scripts/play_bot.py
+COPY scripts/action_parser.py /app/scripts/action_parser.py
 COPY scripts/strategy.py /app/scripts/strategy.py
 
 WORKDIR /app/scripts

@@ -1,0 +1,8 @@
+name: improve_bot
+steps:
+  - name: improve
+    cohort:
+      min_successes: all
+      members:
+        - name: agent
+          block: ImproveBot

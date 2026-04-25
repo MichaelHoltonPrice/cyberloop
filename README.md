@@ -27,11 +27,11 @@ client/
   crates/
     client/       Bevy GUI client -- play the game interactively
     card_renderer/  Reusable card rendering
-scripts/          RL training (train_impala.py), eval, model, env wrapper
-cyberloop/        Project hooks and validators loaded by Flywheel
+scripts/          RL training, checkpoint eval, bot eval, model, env wrapper
+cyberloop/        Validators loaded by Flywheel
 docker/           Block container Dockerfiles (Dockerfile.eval, ...)
 foundry/          Templates and Flywheel workspaces
-tests/            Unit tests for the project hooks and blocks
+tests/            Unit tests for validators and block declarations
 ```
 
 ## Setup
@@ -50,7 +50,6 @@ cd crates/pyenv
 ../../.venv/Scripts/maturin develop --release
 cd ../..
 
-# Project hooks + dev tools (editable install of the cyberloop package).
 # Flywheel itself is installed editable from the sibling repo:
 .venv/Scripts/pip install -e ../flywheel
 .venv/Scripts/pip install -e ".[dev]"
@@ -60,18 +59,33 @@ cd ../..
 
 Train and Eval can be run ad hoc through Flywheel's canonical one-shot
 container pipeline, and `train_eval` runs the same blocks as a pattern.
+Cyberloop also includes an `improve_bot` pattern: a Claude battery block edits
+`bot.py` and can request `EvalBot` by committing a bot artifact under the
+`eval_requested` termination reason.
 The currently supported surface:
 
 - `foundry/templates/blocks/Train.yaml` runs `train_impala.py` and writes a
   flat `checkpoint` artifact with `checkpoint.pt` and `run.json`.
 - `foundry/templates/blocks/Eval.yaml` runs `eval_checkpoint.py` against a
   pre-staged checkpoint artifact and writes a `score` artifact.
+- `foundry/templates/blocks/EvalBot.yaml` runs `eval_bot.py` against a
+  Python `bot.py` artifact and writes a `score` artifact.
+- `foundry/templates/blocks/ImproveBot.yaml` runs the Claude battery image
+  as an ordinary block and routes `eval_requested` to `EvalBot`.
 - `foundry/templates/workspaces/cyberloop.yaml` declares the
-  `checkpoint` and `score` artifact contract.
+  `checkpoint`, `score`, `bot`, and `prompt` artifact contract.
 - `foundry/templates/patterns/train_eval.yaml` declares the canonical
   Train to Eval pattern.
+- `foundry/templates/patterns/improve_bot.yaml` declares the agent-improves-bot
+  pattern.
 - `cyberloop.artifact_validators` validates checkpoint and score
   artifacts through Flywheel's `artifact_validators` hook.
+
+Before the first `ImproveBot` run, import the baseline bot artifact:
+
+```bash
+flywheel import artifact --workspace foundry/workspaces/<workspace> --name bot --from foundry/templates/assets/bots/baseline
+```
 
 Ad hoc training uses the base Flywheel block command from the cyberloop root:
 
