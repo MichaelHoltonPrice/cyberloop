@@ -12,7 +12,8 @@ independent workspaces inside a single test).
 
 The template and per-block YAML strings here are intentionally
 literal copies of the production files under
-``foundry/templates/`` and ``workforce/blocks/``.  Mirroring
+``foundry/templates/workspaces/`` and
+``foundry/templates/blocks/``.  Mirroring
 them keeps tests independent of the on-disk repo layout (so
 the suite still runs from a clean checkout) while making the
 tested shape obvious.  When a new production block lands, add
@@ -83,8 +84,9 @@ def build_project(
     contract (``checkpoint``, ``score``) and the ``Eval`` block,
     plus the project root directory containing
     ``flywheel.yaml``.  The on-disk shape mirrors a real
-    cyberloop checkout: ``foundry/templates/`` for templates
-    and ``workforce/blocks/`` for block YAMLs.
+    cyberloop checkout: ``foundry/templates/workspaces/`` for
+    workspace templates and ``foundry/templates/blocks/`` for
+    block YAMLs.
     """
     project = tmp_path / "project"
     project.mkdir()
@@ -94,11 +96,11 @@ def build_project(
         "artifact_validators: cyberloop.artifact_validators:build_registry\n"
     )
 
-    templates = project / "foundry" / "templates"
+    templates = project / "foundry" / "templates" / "workspaces"
     templates.mkdir(parents=True)
     (templates / "cyberloop.yaml").write_text(TEMPLATE_YAML)
 
-    blocks_dir = project / "workforce" / "blocks"
+    blocks_dir = project / "foundry" / "templates" / "blocks"
     blocks_dir.mkdir(parents=True)
     (blocks_dir / "Train.yaml").write_text(TRAIN_BLOCK_YAML)
     (blocks_dir / "Eval.yaml").write_text(EVAL_BLOCK_YAML)

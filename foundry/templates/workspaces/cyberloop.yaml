@@ -2,7 +2,7 @@
 #
 # Declares the artifact contract every cyberloop pattern shares
 # and the blocks the patterns reference by name.  Block bodies
-# live under ``workforce/blocks/<name>.yaml`` and are resolved
+# live under ``foundry/templates/blocks/<name>.yaml`` and are resolved
 # at template-load time via the project's BlockRegistry.
 artifacts:
   - name: checkpoint

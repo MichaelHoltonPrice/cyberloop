@@ -17,11 +17,15 @@ CYBERLOOP_ROOT = Path(__file__).resolve().parent.parent
 
 def test_train_eval_pattern_file_parses():
     pattern = PatternDeclaration.from_yaml(
-        CYBERLOOP_ROOT / "foundry" / "patterns" / "train_eval.yaml")
+        CYBERLOOP_ROOT / "foundry" / "templates"
+        / "patterns" / "train_eval.yaml")
 
     assert pattern.name == "train_eval"
     assert [step.name for step in pattern.steps] == ["train", "eval"]
     assert pattern.steps[1].cohort.members[0].inputs["checkpoint"]
+    assert pattern.steps[1].cohort.members[0].args == [
+        "--episodes", "4000", "--backend", "numpy",
+    ]
 
 
 def test_train_eval_pattern_runs_through_base_flywheel_cli(
@@ -29,16 +33,18 @@ def test_train_eval_pattern_runs_through_base_flywheel_cli(
     monkeypatch,
 ):
     ws, _template, project = project_setup
-    patterns = project / "foundry" / "patterns"
+    patterns = project / "foundry" / "templates" / "patterns"
     patterns.mkdir(parents=True)
     shutil.copy2(
-        CYBERLOOP_ROOT / "foundry" / "patterns" / "train_eval.yaml",
+        CYBERLOOP_ROOT / "foundry" / "templates"
+        / "patterns" / "train_eval.yaml",
         patterns / "train_eval.yaml",
     )
     monkeypatch.chdir(project)
+    seen_args: list[list[str] | None] = []
 
     def fake_run_container(config, args=None):
-        del args
+        seen_args.append(args)
         mounts = {
             container: Path(host)
             for host, container, mode in config.mounts
@@ -74,6 +80,10 @@ def test_train_eval_pattern_runs_through_base_flywheel_cli(
         "checkpoint": train_execution.output_bindings["checkpoint"]
     }
     assert set(eval_execution.output_bindings) == {"score"}
+    assert seen_args == [
+        ["--subclass", "dueling", "--combat-only"],
+        ["--episodes", "4000", "--backend", "numpy"],
+    ]
 
 
 def _write_checkpoint(path: Path) -> None:

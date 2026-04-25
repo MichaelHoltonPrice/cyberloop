@@ -24,15 +24,13 @@ The client depends on engine crates via relative paths but compiles independentl
 - `scripts/` — RL training (`train_impala.py`), evaluation
   (`eval_checkpoint.py`, `eval_common.py`, `numpy_eval.py`), shared model
   (`model.py`), Gym wrapper (`decker_env.py`), and bot harness.
-- `cyberloop/` - the `cyberloop.project:ProjectHooks` class consumed by
-  `flywheel run pattern`. Stays thin: the hooks hand the pattern runner
-  a canonical `run_block` adapter for Cyberloop's one-shot containers.
-  The block YAMLs and patterns themselves do the topology work.
-- `workforce/blocks/`, `foundry/templates/`, `patterns/`,
-  `docker/Dockerfile.eval` — currently ship the `Eval` block, the shared
-  `checkpoint`/`score` artifact contract, and the `eval_only` pattern.
-  The training-segment block and the alternating train-eval pattern land
-  in follow-up commits.
+- `cyberloop/` - project hooks and validators loaded by Flywheel.
+- `foundry/templates/blocks/` - Train and Eval block templates.
+- `foundry/templates/workspaces/` - workspace templates, including the
+  shared `checkpoint`/`score` artifact contract.
+- `foundry/templates/patterns/` - pattern templates, including the
+  canonical Train to Eval pattern.
+- `docker/` - block container Dockerfiles.
 
 ## Build and test
 

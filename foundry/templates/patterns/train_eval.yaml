@@ -24,6 +24,6 @@ steps:
               output: checkpoint
           args:
             - --episodes
-            - "2"
+            - "4000"
             - --backend
             - numpy

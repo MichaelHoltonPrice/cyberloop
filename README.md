@@ -28,11 +28,9 @@ client/
     client/       Bevy GUI client -- play the game interactively
     card_renderer/  Reusable card rendering
 scripts/          RL training (train_impala.py), eval, model, env wrapper
-cyberloop/        Project hooks loaded by `flywheel run pattern`
+cyberloop/        Project hooks and validators loaded by Flywheel
 docker/           Block container Dockerfiles (Dockerfile.eval, ...)
-foundry/          Workspace template (`templates/cyberloop.yaml`)
-patterns/         Pattern YAMLs (`eval_only.yaml`, ...)
-workforce/        Block YAMLs (`blocks/Eval.yaml`, ...)
+foundry/          Templates and Flywheel workspaces
 tests/            Unit tests for the project hooks and blocks
 ```
 
@@ -60,23 +58,20 @@ cd ../..
 
 ## Orchestration
 
-Pattern runs are deferred while Flywheel's pattern surface is rebuilt on the
-canonical block-execution pipeline. `flywheel.yaml` still points at
-`cyberloop.project:ProjectHooks`, but invoking that hook raises a clear
-deferred-pattern error. Train and Eval can be run ad hoc through Flywheel's
-canonical one-shot container pipeline. The currently supported surface:
+Train and Eval can be run ad hoc through Flywheel's canonical one-shot
+container pipeline, and `train_eval` runs the same blocks as a pattern.
+The currently supported surface:
 
-- `workforce/blocks/Train.yaml` ? runs `train_impala.py` and writes a
+- `foundry/templates/blocks/Train.yaml` runs `train_impala.py` and writes a
   flat `checkpoint` artifact with `checkpoint.pt` and `run.json`.
-- `workforce/blocks/Eval.yaml` ? runs `eval_checkpoint.py` against a
+- `foundry/templates/blocks/Eval.yaml` runs `eval_checkpoint.py` against a
   pre-staged checkpoint artifact and writes a `score` artifact.
-- `foundry/templates/cyberloop.yaml` ? declares the `checkpoint` and
-  `score` artifact contract.
-- `cyberloop.artifact_validators` ? validates checkpoint and score
+- `foundry/templates/workspaces/cyberloop.yaml` declares the
+  `checkpoint` and `score` artifact contract.
+- `foundry/templates/patterns/train_eval.yaml` declares the canonical
+  Train to Eval pattern.
+- `cyberloop.artifact_validators` validates checkpoint and score
   artifacts through Flywheel's `artifact_validators` hook.
-
-`patterns/eval_only.yaml` is retained as deferred pattern metadata; it is not
-currently invokable through `cyberloop.project:ProjectHooks`.
 
 Ad hoc training uses the base Flywheel block command from the cyberloop root:
 

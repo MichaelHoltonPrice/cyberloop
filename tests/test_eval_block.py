@@ -1,7 +1,5 @@
 """Tests for the ``Eval`` block and its wiring.
 
-Covers the ``eval_only`` pattern metadata and Eval block shape.
-
 Three concentric rings of coverage:
 
 1.  *Mirror-shape* tests use the ``project_setup`` fixture's
@@ -9,10 +7,10 @@ Three concentric rings of coverage:
     contract the rest of the test suite depends on.
 
 2.  *Production-file* tests load the actual on-disk
-    ``workforce/blocks/Eval.yaml``,
-    ``foundry/templates/cyberloop.yaml``, and
-    ``patterns/eval_only.yaml`` so that drift between the test
-    mirror strings and the production files is caught loudly.
+    ``foundry/templates/blocks/Eval.yaml`` and
+    ``foundry/templates/workspaces/cyberloop.yaml`` so that drift
+    between the test mirror strings and the production files is
+    caught loudly.
 
 The ``project_setup`` fixture is provided by ``conftest.py``.
 """
@@ -22,7 +20,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from flywheel.blocks.registry import BlockRegistry
-from flywheel.pattern import ContinuousTrigger, Pattern
 from flywheel.template import Template
 
 CYBERLOOP_ROOT = Path(__file__).resolve().parent.parent
@@ -39,13 +36,13 @@ class TestEvalBlockYaml:
     def test_eval_is_registered(self, project_setup):
         _, _, project = project_setup
         registry = BlockRegistry.from_directory(
-            project / "workforce" / "blocks")
+            project / "foundry" / "templates" / "blocks")
         assert "Eval" in registry
 
     def test_runner_image_lifecycle(self, project_setup):
         _, _, project = project_setup
         registry = BlockRegistry.from_directory(
-            project / "workforce" / "blocks")
+            project / "foundry" / "templates" / "blocks")
         eval_def = registry.get("Eval")
         assert eval_def.runner == "container"
         assert eval_def.image == "cyberloop-eval:latest"
@@ -58,7 +55,7 @@ class TestEvalBlockYaml:
     def test_input_and_output_slots(self, project_setup):
         _, _, project = project_setup
         registry = BlockRegistry.from_directory(
-            project / "workforce" / "blocks")
+            project / "foundry" / "templates" / "blocks")
         eval_def = registry.get("Eval")
 
         assert len(eval_def.inputs) == 1
@@ -79,7 +76,7 @@ class TestEvalBlockYaml:
         # to update this test deliberately.
         _, _, project = project_setup
         registry = BlockRegistry.from_directory(
-            project / "workforce" / "blocks")
+            project / "foundry" / "templates" / "blocks")
         eval_def = registry.get("Eval")
         assert eval_def.post_check is None
 
@@ -122,81 +119,21 @@ class TestCyberloopTemplate:
         assert checkpoint_out.container_path == "/output/checkpoint"
 
 
-class TestEvalOnlyPattern:
-    """``eval_only`` parses into the one-shot eval shape.
-
-    Pins the production pattern's instance count, trigger,
-    inputs, and overrides — the contract the runner consumes.
-    """
-
-    PATTERN_PATH = (
-        CYBERLOOP_ROOT / "patterns" / "eval_only.yaml")
-
-    def _load(self) -> Pattern:
-        return Pattern.from_yaml(self.PATTERN_PATH)
-
-    def test_pattern_name_from_filename(self):
-        pattern = self._load()
-        assert pattern.name == "eval_only"
-
-    def test_single_eval_instance(self):
-        instances = self._load().iter_instances()
-        assert len(instances) == 1
-        eval_instance = instances[0]
-        assert eval_instance.name == "eval"
-        assert eval_instance.block == "Eval"
-        assert eval_instance.cardinality == 1
-
-    def test_trigger_is_continuous(self):
-        # ``continuous`` + ``cardinality: 1`` is the “fire once
-        # at run start, end the run when the container exits”
-        # shape.  ``autorestart`` would loop forever — wrong
-        # for an eval pass.
-        eval_instance = self._load().iter_instances()[0]
-        assert isinstance(
-            eval_instance.trigger, ContinuousTrigger)
-
-    def test_inputs_match_block_slot(self):
-        # The pattern only consumes ``checkpoint``; ``score``
-        # is the block's output slot, not a pattern input.
-        eval_instance = self._load().iter_instances()[0]
-        assert eval_instance.inputs == ["checkpoint"]
-
-    def test_overrides_carry_eval_knobs(self):
-        # These keys are retained as pattern metadata while
-        # Cyberloop pattern execution is deferred.
-        eval_instance = self._load().iter_instances()[0]
-        assert eval_instance.overrides == {
-            "subclass": "dueling",
-            "episodes": 4000,
-            "backend": "numpy",
-        }
-
-    def test_no_extra_env(self):
-        # Nothing per-instance for now.  If env knobs land
-        # later (e.g., per-pattern OMP_NUM_THREADS overrides),
-        # they go through ``extra_env`` on the explicit
-        # container-extras seam, not through ``overrides``.
-        eval_instance = self._load().iter_instances()[0]
-        assert eval_instance.extra_env == {}
-
 
 class TestProductionFilesParseAgainstRegistry:
     """Production YAML files load cleanly via substrate parsers.
 
-    Loads the real on-disk block / template / pattern files (not
-    the test-fixture mirror strings) so drift between the two is
-    caught loudly.
+    Loads the real on-disk block and workspace-template files
+    (not the test-fixture mirror strings) so drift between the
+    two is caught loudly.
     """
 
-    BLOCKS_DIR = CYBERLOOP_ROOT / "workforce" / "blocks"
+    BLOCKS_DIR = CYBERLOOP_ROOT / "foundry" / "templates" / "blocks"
     TEMPLATE_PATH = (
-        CYBERLOOP_ROOT / "foundry" / "templates"
+        CYBERLOOP_ROOT / "foundry" / "templates" / "workspaces"
         / "cyberloop.yaml")
-    PATTERN_PATH = (
-        CYBERLOOP_ROOT / "patterns" / "eval_only.yaml")
 
-    def test_workforce_blocks_directory_loads(self):
+    def test_block_templates_directory_loads(self):
         registry = BlockRegistry.from_directory(self.BLOCKS_DIR)
         assert {"Train", "Eval"}.issubset(set(registry.names()))
 
@@ -208,15 +145,3 @@ class TestProductionFilesParseAgainstRegistry:
         assert "Train" in [b.name for b in template.blocks]
         assert {a.name for a in template.artifacts} == {
             "checkpoint", "score"}
-
-    def test_pattern_loads_with_registry(self):
-        # Passing the registry exercises the runner's
-        # production load path (any ``every_n_executions``
-        # trigger would be validated against it).  The
-        # eval-only pattern has no such trigger today, but
-        # passing the registry still pins the call shape.
-        registry = BlockRegistry.from_directory(self.BLOCKS_DIR)
-        pattern = Pattern.from_yaml(
-            self.PATTERN_PATH, block_registry=registry)
-        assert pattern.name == "eval_only"
-        assert len(pattern.iter_instances()) == 1
