@@ -8,6 +8,7 @@ docker_args:
   - claude-auth:/home/claude/.claude:rw
 env:
   MAX_TURNS: "400"
+  COMPACT_TOKEN_LIMIT: "200000"
 state: managed
 inputs:
   - name: game_engine
