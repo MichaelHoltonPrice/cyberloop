@@ -72,9 +72,10 @@ The currently supported surface:
   Python `bot.py` artifact and writes a `score` artifact.
 - `foundry/templates/blocks/ImproveBot.yaml` runs a Cyberloop image
   derived from Flywheel's Claude battery and routes `eval_requested`
-  to `EvalBot`.
+  to `EvalBot`. It mounts the checked-in Decker engine source as the
+  `game_engine` git artifact at `/source`.
 - `foundry/templates/workspaces/cyberloop.yaml` declares the
-  `checkpoint`, `score`, and `bot` artifact contract.
+  `game_engine`, `checkpoint`, `score`, and `bot` artifact contract.
 - `foundry/templates/patterns/train_eval.yaml` declares the canonical
   Train to Eval pattern.
 - `foundry/templates/patterns/improve_bot.yaml` declares the agent-improves-bot
@@ -83,11 +84,12 @@ The currently supported surface:
 - `cyberloop.artifact_validators` validates checkpoint and score
   artifacts through Flywheel's `artifact_validators` hook.
 
-Build the Claude battery image, then the Cyberloop image that bakes
-in the ImproveBot prompt:
+Build the Claude battery image, the Cyberloop eval image, then the
+Cyberloop image that bakes in the ImproveBot prompt:
 
 ```bash
 docker build -f ../flywheel/batteries/claude/Dockerfile.claude -t flywheel-claude:latest ../flywheel/batteries/claude
+docker build -f docker/Dockerfile.eval -t cyberloop-eval:latest .
 docker build -f docker/Dockerfile.improve-bot-agent -t cyberloop-improve-bot-agent:latest .
 ```
 
@@ -103,6 +105,13 @@ docker run --rm -v claude-auth:/auth -v "%USERPROFILE%\.claude:/host-claude:ro" 
 The `improve_bot` pattern materializes the checked-in baseline bot as
 a real `bot` artifact fixture for each lane at pattern start. There is
 no manual import step for the normal pattern.
+
+The pattern stores its resolved parameters on the Flywheel run record.
+Override the Claude model or EvalBot episode count at run start:
+
+```bash
+flywheel run pattern improve_bot --workspace foundry/workspaces/<workspace> --template cyberloop --param model=claude-opus-4-7 --param eval_episodes=4000
+```
 
 Ad hoc training uses the base Flywheel block command from the cyberloop root:
 

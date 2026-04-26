@@ -33,6 +33,13 @@ from eval_io import print_summary, write_scores  # noqa: E402
 from play_bot import play_parallel  # noqa: E402
 
 
+def write_flywheel_termination(reason: str = "normal") -> None:
+    """Announce a Flywheel termination reason when running in Flywheel."""
+    termination = Path("/flywheel/termination")
+    if termination.parent.exists():
+        termination.write_text(reason, encoding="utf-8")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluate a bot through parallel gauntlet episodes")
@@ -82,10 +89,13 @@ def main():
 
     # If the eval was aborted (speed screen or timeout gate),
     # exit with code 2 so flywheel records it as a failed execution.
+    # Do not write a project termination reason on this path:
+    # non-zero exit is intentionally a substrate-level invoke failure.
     if stats.get("aborted"):
         print(stats.get("abort_message", "Eval aborted"),
               file=sys.stderr)
         sys.exit(2)
+    write_flywheel_termination("normal")
 
 
 if __name__ == "__main__":

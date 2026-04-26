@@ -5,6 +5,10 @@
 # live under ``foundry/templates/blocks/<name>.yaml`` and are resolved
 # at template-load time via the project's BlockRegistry.
 artifacts:
+  - name: game_engine
+    kind: git
+    repo: "."
+    path: crates
   - name: checkpoint
     kind: copy
   - name: score

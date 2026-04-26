@@ -33,6 +33,10 @@ from flywheel.workspace import Workspace
 
 TEMPLATE_YAML = """\
 artifacts:
+  - name: game_engine
+    kind: git
+    repo: "."
+    path: crates
   - name: checkpoint
     kind: copy
   - name: score
@@ -104,8 +108,13 @@ env:
   MAX_TURNS: "20"
 state: managed
 inputs:
+  - name: game_engine
+    container_path: /source
   - name: bot
     container_path: /input/bot
+  - name: score
+    container_path: /input/score
+    optional: true
 outputs:
   eval_requested:
     - name: bot
@@ -128,7 +137,7 @@ on_termination:
           - --subclass
           - dueling
           - --episodes
-          - "200"
+          - ${params.eval_episodes}
           - --n-workers
           - "1"
 """

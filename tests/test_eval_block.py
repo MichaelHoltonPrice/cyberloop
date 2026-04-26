@@ -93,6 +93,7 @@ class TestCyberloopTemplate:
         _, template, _ = project_setup
         kinds = {a.name: a.kind for a in template.artifacts}
         assert kinds == {
+            "game_engine": "git",
             "checkpoint": "copy",
             "score": "copy",
             "bot": "copy",
@@ -128,8 +129,11 @@ class TestCyberloopTemplate:
         improve = next(b for b in template.blocks if b.name == "ImproveBot")
         assert improve.image == "cyberloop-improve-bot-agent:latest"
         assert improve.state == "managed"
-        assert [slot.name for slot in improve.inputs] == ["bot"]
-        assert improve.inputs[0].optional is False
+        assert [slot.name for slot in improve.inputs] == [
+            "game_engine", "bot", "score"]
+        assert improve.inputs[0].container_path == "/source"
+        assert improve.inputs[1].optional is False
+        assert improve.inputs[2].optional is True
         assert [slot.name for slot in improve.outputs_for("eval_requested")] == [
             "bot"]
         assert [slot.name for slot in improve.outputs_for("done")] == ["bot"]
@@ -137,6 +141,7 @@ class TestCyberloopTemplate:
         assert invocation.block == "EvalBot"
         assert invocation.bind["bot"].parent_output == "bot"
         assert "--episodes" in invocation.args
+        assert "${params.eval_episodes}" in invocation.args
 
         eval_bot = next(b for b in template.blocks if b.name == "EvalBot")
         assert eval_bot.docker_args == ["--entrypoint", "python"]
@@ -183,7 +188,7 @@ class TestProductionFilesParseAgainstRegistry:
         assert "EvalBot" in [b.name for b in template.blocks]
         assert "ImproveBot" in [b.name for b in template.blocks]
         assert {a.name for a in template.artifacts} == {
-            "checkpoint", "score", "bot"}
+            "game_engine", "checkpoint", "score", "bot"}
 
     def test_improve_bot_pattern_declares_lanes_and_fixture(self):
         pattern = PatternDeclaration.from_yaml(
@@ -195,6 +200,8 @@ class TestProductionFilesParseAgainstRegistry:
         )
 
         assert pattern.lanes == ["A", "B", "C"]
+        assert pattern.params["model"].default == "claude-sonnet-4-6"
+        assert pattern.params["eval_episodes"].default == 4000
         assert pattern.fixtures["bot"].source == (
             "foundry/templates/assets/bots/baseline")
         assert [step.name for step in pattern.steps] == [
@@ -208,4 +215,12 @@ class TestProductionFilesParseAgainstRegistry:
             ("A", "A", "ImproveBot"),
             ("B", "B", "ImproveBot"),
             ("C", "C", "ImproveBot"),
+        ]
+        assert [
+            member.env["MODEL"]
+            for member in pattern.steps[0].cohort.members
+        ] == [
+            "${params.model}",
+            "${params.model}",
+            "${params.model}",
         ]
