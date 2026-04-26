@@ -91,6 +91,15 @@ docker build -f ../flywheel/batteries/claude/Dockerfile.claude -t flywheel-claud
 docker build -f docker/Dockerfile.improve-bot-agent -t cyberloop-improve-bot-agent:latest .
 ```
 
+The ImproveBot block uses the `claude-auth` Docker volume. After
+logging in with Claude Code on the host, refresh that volume from
+the cyberloop root:
+
+```bat
+docker volume create claude-auth
+docker run --rm -v claude-auth:/auth -v "%USERPROFILE%\.claude:/host-claude:ro" python:3.12-slim sh -c "cp -a /host-claude/. /auth/ && chown -R 1000:1000 /auth"
+```
+
 The `improve_bot` pattern materializes the checked-in baseline bot as
 a real `bot` artifact fixture for each lane at pattern start. There is
 no manual import step for the normal pattern.
