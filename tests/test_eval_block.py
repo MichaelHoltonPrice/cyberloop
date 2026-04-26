@@ -134,10 +134,10 @@ class TestCyberloopTemplate:
         assert improve.inputs[0].container_path == "/source"
         assert improve.inputs[1].optional is False
         assert improve.inputs[2].optional is True
-        assert [slot.name for slot in improve.outputs_for("eval_requested")] == [
-            "bot"]
-        assert [slot.name for slot in improve.outputs_for("done")] == ["bot"]
-        invocation = improve.on_termination["eval_requested"][0]
+        assert [slot.name for slot in improve.outputs_for("normal")] == ["bot"]
+        assert improve.outputs_for("eval_requested") == []
+        assert improve.outputs_for("done") == []
+        invocation = improve.on_termination["normal"][0]
         assert invocation.block == "EvalBot"
         assert invocation.bind["bot"].parent_output == "bot"
         assert "--episodes" in invocation.args
@@ -223,4 +223,27 @@ class TestProductionFilesParseAgainstRegistry:
             "${params.model}",
             "${params.model}",
             "${params.model}",
+        ]
+
+    def test_improve_bot_sonnet_2lane_pattern_declares_two_lanes(self):
+        pattern = PatternDeclaration.from_yaml(
+            CYBERLOOP_ROOT
+            / "foundry"
+            / "templates"
+            / "patterns"
+            / "improve_bot_sonnet_2lane.yaml"
+        )
+
+        assert pattern.name == "improve_bot_sonnet_2lane"
+        assert pattern.lanes == ["A", "B"]
+        assert pattern.params["model"].default == "claude-sonnet-4-6"
+        assert pattern.params["eval_episodes"].default == 4000
+        assert pattern.fixtures["bot"].source == (
+            "foundry/templates/assets/bots/baseline")
+        assert [
+            (member.name, member.lane, member.block)
+            for member in pattern.steps[0].cohort.members
+        ] == [
+            ("A", "A", "ImproveBot"),
+            ("B", "B", "ImproveBot"),
         ]

@@ -36,6 +36,31 @@ tests/            Unit tests for validators and block declarations
 
 ## Setup
 
+From the cyberloop repo root, create and activate a virtual environment:
+
+Windows cmd:
+
+```bat
+python -m venv .venv
+.venv\Scripts\activate.bat
+```
+
+PowerShell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+Linux/macOS:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+Then install the Python dependencies and Flywheel editable package:
+
 ```bash
 # Build and test the engine
 cargo test
@@ -43,16 +68,14 @@ cargo test
 # Play interactively (requires Bevy dependencies)
 cargo run -p decker-client
 
-# Python bindings
-python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt
+python -m pip install -r requirements.txt
 cd crates/pyenv
-../../.venv/Scripts/maturin develop --release
+python -m maturin develop --release
 cd ../..
 
 # Flywheel itself is installed editable from the sibling repo:
-.venv/Scripts/pip install -e ../flywheel
-.venv/Scripts/pip install -e ".[dev]"
+python -m pip install -e ../flywheel
+python -m pip install -e ".[dev]"
 ```
 
 ## Orchestration
@@ -60,8 +83,8 @@ cd ../..
 Train and Eval can be run ad hoc through Flywheel's canonical one-shot
 container pipeline, and `train_eval` runs the same blocks as a pattern.
 Cyberloop also includes an `improve_bot` pattern: a Claude battery block edits
-`bot.py` and can request `EvalBot` by committing a bot artifact under the
-`eval_requested` termination reason.
+`bot.py`, commits the result as a bot artifact on normal completion, and
+automatically invokes `EvalBot`.
 The currently supported surface:
 
 - `foundry/templates/blocks/Train.yaml` runs `train_impala.py` and writes a
@@ -71,7 +94,7 @@ The currently supported surface:
 - `foundry/templates/blocks/EvalBot.yaml` runs `eval_bot.py` against a
   Python `bot.py` artifact and writes a `score` artifact.
 - `foundry/templates/blocks/ImproveBot.yaml` runs a Cyberloop image
-  derived from Flywheel's Claude battery and routes `eval_requested`
+  derived from Flywheel's Claude battery and routes normal completion
   to `EvalBot`. It mounts the checked-in Decker engine source as the
   `game_engine` git artifact at `/source`.
 - `foundry/templates/workspaces/cyberloop.yaml` declares the
@@ -81,8 +104,13 @@ The currently supported surface:
 - `foundry/templates/patterns/improve_bot.yaml` declares the agent-improves-bot
   pattern: three run-scoped lanes, each seeded from the checked-in
   baseline bot fixture before the first ImproveBot execution.
+- `foundry/templates/patterns/improve_bot_sonnet_2lane.yaml` declares the
+  laptop-friendly Sonnet ImproveBot pattern: two run-scoped lanes, each
+  seeded from the same baseline bot fixture.
 - `cyberloop.artifact_validators` validates checkpoint and score
   artifacts through Flywheel's `artifact_validators` hook.
+
+### Container images
 
 Build the Claude battery image, the Cyberloop eval image, then the
 Cyberloop image that bakes in the ImproveBot prompt:
@@ -93,30 +121,81 @@ docker build -f docker/Dockerfile.eval -t cyberloop-eval:latest .
 docker build -f docker/Dockerfile.improve-bot-agent -t cyberloop-improve-bot-agent:latest .
 ```
 
+### Claude auth volume
+
 The ImproveBot block uses the `claude-auth` Docker volume. After
-logging in with Claude Code on the host, refresh that volume from
-the cyberloop root:
+logging in with Claude Code on the host (`/login` inside Claude Code),
+refresh that volume from the cyberloop root.
+
+Windows cmd:
 
 ```bat
 docker volume create claude-auth
 docker run --rm -v claude-auth:/auth -v "%USERPROFILE%\.claude:/host-claude:ro" python:3.12-slim sh -c "cp -a /host-claude/. /auth/ && chown -R 1000:1000 /auth"
 ```
 
-The `improve_bot` pattern materializes the checked-in baseline bot as
-a real `bot` artifact fixture for each lane at pattern start. There is
-no manual import step for the normal pattern.
+PowerShell:
 
-The pattern stores its resolved parameters on the Flywheel run record.
-Override the Claude model or EvalBot episode count at run start:
+```powershell
+docker volume create claude-auth
+docker run --rm -v claude-auth:/auth -v "$env:USERPROFILE\.claude:/host-claude:ro" python:3.12-slim sh -c "cp -a /host-claude/. /auth/ && chown -R 1000:1000 /auth"
+```
+
+Linux/macOS:
 
 ```bash
-flywheel run pattern improve_bot --workspace foundry/workspaces/<workspace> --template cyberloop --param model=claude-opus-4-7 --param eval_episodes=4000
+docker volume create claude-auth
+docker run --rm -v claude-auth:/auth -v "$HOME/.claude:/host-claude:ro" python:3.12-slim sh -c "cp -a /host-claude/. /auth/ && chown -R 1000:1000 /auth"
+```
+
+The Claude battery entrypoint scrubs the volume at container start so the
+agent sees only the credentials and synthesized settings it needs, not host
+conversation history.
+
+### Workspaces and pattern runs
+
+Create a workspace from the cyberloop root. The workspace template includes
+a `game_engine` git artifact, so create workspaces from a clean git tree:
+
+```bash
+python -m flywheel create workspace --name improve-bot-sonnet-2lane --template cyberloop
+```
+
+The ImproveBot patterns materialize the checked-in baseline bot as a real
+`bot` artifact fixture for each lane at pattern start. There is no manual
+artifact import step for these patterns.
+
+The pattern stores its resolved parameters on the Flywheel run record.
+The laptop-friendly two-lane Sonnet run is:
+
+```bash
+python -m flywheel run pattern improve_bot_sonnet_2lane --workspace foundry/workspaces/improve-bot-sonnet-2lane --template cyberloop
+```
+
+The full three-lane ImproveBot pattern uses the same default Sonnet model
+and 4000-episode EvalBot runs:
+
+```bash
+python -m flywheel run pattern improve_bot --workspace foundry/workspaces/<workspace> --template cyberloop
+```
+
+To run the three-lane pattern with Opus instead, override the model at run
+start. The resolved model is stored on the run record:
+
+```bash
+python -m flywheel run pattern improve_bot --workspace foundry/workspaces/<workspace> --template cyberloop --param model=claude-opus-4-7
+```
+
+`train_eval` is the currently supported RL checkpoint pattern:
+
+```bash
+python -m flywheel run pattern train_eval --workspace foundry/workspaces/<workspace> --template cyberloop
 ```
 
 Ad hoc training uses the base Flywheel block command from the cyberloop root:
 
 ```bash
-flywheel run block --workspace foundry/workspaces/<workspace> --block Train --template cyberloop -- --subclass dueling --combat-only
+python -m flywheel run block --workspace foundry/workspaces/<workspace> --block Train --template cyberloop -- --subclass dueling --combat-only
 ```
 
 ## License

@@ -1,5 +1,5 @@
-# Runs a Claude agent that edits bot.py and chooses whether to
-# request EvalBot by announcing a project termination reason.
+# Runs a Claude agent that edits bot.py. Normal completion commits
+# the candidate bot and automatically invokes EvalBot.
 name: ImproveBot
 runner: container
 image: cyberloop-improve-bot-agent:latest
@@ -18,14 +18,11 @@ inputs:
     container_path: /input/score
     optional: true
 outputs:
-  eval_requested:
-    - name: bot
-      container_path: /output/bot
-  done:
+  normal:
     - name: bot
       container_path: /output/bot
 on_termination:
-  eval_requested:
+  normal:
     invoke:
       - block: EvalBot
         bind:

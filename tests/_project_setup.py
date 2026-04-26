@@ -116,14 +116,11 @@ inputs:
     container_path: /input/score
     optional: true
 outputs:
-  eval_requested:
-    - name: bot
-      container_path: /output/bot
-  done:
+  normal:
     - name: bot
       container_path: /output/bot
 on_termination:
-  eval_requested:
+  normal:
     invoke:
       - block: EvalBot
         bind:

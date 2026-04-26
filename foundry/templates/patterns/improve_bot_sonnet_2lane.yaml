@@ -1,0 +1,28 @@
+name: improve_bot_sonnet_2lane
+params:
+  model:
+    type: string
+    default: claude-sonnet-4-6
+  eval_episodes:
+    type: int
+    default: 4000
+lanes:
+  - A
+  - B
+fixtures:
+  bot: foundry/templates/assets/bots/baseline
+steps:
+  - name: improve_1
+    cohort:
+      min_successes: all
+      foreach: lanes
+      block: ImproveBot
+      env:
+        MODEL: ${params.model}
+  - name: improve_2
+    cohort:
+      min_successes: all
+      foreach: lanes
+      block: ImproveBot
+      env:
+        MODEL: ${params.model}
