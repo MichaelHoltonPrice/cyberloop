@@ -234,34 +234,17 @@ class TestProductionFilesParseAgainstRegistry:
             / "improve_bot.yaml"
         )
 
-        assert pattern.lanes == ["A", "B", "C"]
+        assert pattern.lanes == ["lane_0", "lane_1", "lane_2"]
         assert pattern.params["model"].default == "claude-sonnet-4-6[1m]"
         assert pattern.params["eval_episodes"].default == 4000
+        assert pattern.params["max_evals"].default == 5
         assert pattern.fixtures["bot"].source == (
             "foundry/templates/assets/bots/baseline")
-        assert [step.name for step in pattern.steps] == [
-            "improve_1",
-            "improve_2",
-            "improve_3",
-            "improve_4",
-            "improve_5",
-        ]
-        assert [
-            (member.name, member.lane, member.block)
-            for member in pattern.steps[-1].cohort.members
-        ] == [
-            ("A", "A", "ImproveBot"),
-            ("B", "B", "ImproveBot"),
-            ("C", "C", "ImproveBot"),
-        ]
-        assert [
-            member.env["MODEL"]
-            for member in pattern.steps[0].cohort.members
-        ] == [
-            "${params.model}",
-            "${params.model}",
-            "${params.model}",
-        ]
+        assert pattern.steps == []
+        assert "improve_bot_lane" in pattern.patterns
+        lane_pattern = pattern.patterns["improve_bot_lane"]
+        assert lane_pattern.params["max_evals"].type == "int"
+        assert lane_pattern.body
 
     def test_improve_bot_sonnet_2lane_pattern_declares_two_lanes(self):
         pattern = PatternDeclaration.from_yaml(
@@ -273,15 +256,11 @@ class TestProductionFilesParseAgainstRegistry:
         )
 
         assert pattern.name == "improve_bot_sonnet_2lane"
-        assert pattern.lanes == ["A", "B"]
+        assert pattern.lanes == ["lane_0", "lane_1"]
         assert pattern.params["model"].default == "claude-sonnet-4-6[1m]"
         assert pattern.params["eval_episodes"].default == 4000
+        assert pattern.params["max_evals"].default == 5
         assert pattern.fixtures["bot"].source == (
             "foundry/templates/assets/bots/baseline")
-        assert [
-            (member.name, member.lane, member.block)
-            for member in pattern.steps[-1].cohort.members
-        ] == [
-            ("A", "A", "ImproveBot"),
-            ("B", "B", "ImproveBot"),
-        ]
+        assert pattern.steps == []
+        assert pattern.patterns["improve_bot_lane"].body

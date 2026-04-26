@@ -103,10 +103,11 @@ The currently supported surface:
   Train to Eval pattern.
 - `foundry/templates/patterns/improve_bot.yaml` declares the agent-improves-bot
   pattern: three run-scoped lanes, each seeded from the checked-in
-  baseline bot fixture before the first ImproveBot execution.
+  baseline bot fixture before running a lane-local ImproveBot loop.
 - `foundry/templates/patterns/improve_bot_sonnet_2lane.yaml` declares the
   laptop-friendly Sonnet ImproveBot pattern: two run-scoped lanes, each
-  seeded from the same baseline bot fixture.
+  seeded from the same baseline bot fixture and run to completion before
+  the next lane starts.
 - `cyberloop.artifact_validators` validates checkpoint and score
   artifacts through Flywheel's `artifact_validators` hook.
 
@@ -171,13 +172,15 @@ ImproveBot runs use `COMPACT_TOKEN_LIMIT=200000`, so Claude compacts
 before context is too large to compact reliably. Sonnet patterns default
 to the 1M-context model name (`claude-sonnet-4-6[1m]`).
 
-The laptop-friendly two-lane Sonnet pattern gives each lane five
-ImproveBot segments. Each segment can save a candidate bot and call
-`request_eval`; the EvalBot result is returned to the resumed Claude
-session and is also available as `/input/score/scores.json` in the
-next segment. The Claude battery rewrites the persisted session before
-resume, so the agent sees the EvalBot result as the normal result of
-its `request_eval` tool call.
+The laptop-friendly two-lane Sonnet pattern runs each lane as a
+bounded loop. In one lane, ImproveBot keeps resuming the same managed
+Claude session until the agent exits normally or has used five
+`request_eval` calls. Each `request_eval` commits the candidate bot,
+invokes EvalBot, and returns the EvalBot result to the resumed Claude
+session; the score artifact is also mounted at `/input/score/scores.json`
+for the next ImproveBot iteration. The Claude battery rewrites the
+persisted session before resume, so the agent sees the EvalBot result
+as the normal result of its `request_eval` tool call.
 
 Run it with:
 
@@ -185,7 +188,7 @@ Run it with:
 python -m flywheel run pattern improve_bot_sonnet_2lane --workspace foundry/workspaces/improve-bot-sonnet-2lane --template cyberloop
 ```
 
-The full three-lane ImproveBot pattern uses the same five-segment
+The full three-lane ImproveBot pattern uses the same five-evaluation
 budget per lane, default 1M-context Sonnet model, and 4000-episode
 EvalBot runs:
 

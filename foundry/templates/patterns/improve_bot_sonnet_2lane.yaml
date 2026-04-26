@@ -6,44 +6,37 @@ params:
   eval_episodes:
     type: int
     default: 4000
-lanes:
-  - A
-  - B
+  max_evals:
+    type: int
+    default: 5
 fixtures:
   bot: foundry/templates/assets/bots/baseline
-steps:
-  - name: improve_1
-    cohort:
-      min_successes: all
-      foreach: lanes
-      block: ImproveBot
-      env:
-        MODEL: ${params.model}
-  - name: improve_2
-    cohort:
-      min_successes: all
-      foreach: lanes
-      block: ImproveBot
-      env:
-        MODEL: ${params.model}
-  - name: improve_3
-    cohort:
-      min_successes: all
-      foreach: lanes
-      block: ImproveBot
-      env:
-        MODEL: ${params.model}
-  - name: improve_4
-    cohort:
-      min_successes: all
-      foreach: lanes
-      block: ImproveBot
-      env:
-        MODEL: ${params.model}
-  - name: improve_5
-    cohort:
-      min_successes: all
-      foreach: lanes
-      block: ImproveBot
-      env:
-        MODEL: ${params.model}
+do:
+  - foreach:
+      count: 2
+    do:
+      - use: improve_bot_lane
+        with:
+          model: ${params.model}
+          max_evals: ${params.max_evals}
+          eval_episodes: ${params.eval_episodes}
+patterns:
+  improve_bot_lane:
+    params:
+      model:
+        type: string
+      max_evals:
+        type: int
+      eval_episodes:
+        type: int
+    do:
+      - run_until:
+          name: improve
+          block: ImproveBot
+          env:
+            MODEL: ${params.model}
+          continue_on:
+            eval_requested:
+              max: ${params.max_evals}
+          stop_on:
+            - normal
