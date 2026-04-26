@@ -142,7 +142,9 @@ def play_parallel(bot_path, subclass, episodes, seed=42, race="human",
 
     Returns:
         Stats dict with keys: fights_won, mean, median, std, min, max,
-        p25, p75, episodes, total_steps, elapsed_s, timed_out, error_count.
+        p25, p75, episodes, total_steps, elapsed_s, timed_out, errors,
+        error_count (errors and error_count carry the same value;
+        error_count is retained for downstream agent tool calls).
     """
     if n_workers is None:
         n_workers = min(os.cpu_count() or 4, episodes)
@@ -235,6 +237,7 @@ def _build_stats(fights, total_steps, elapsed, timed_out,
         "total_steps": total_steps,
         "elapsed_s": round(elapsed, 1),
         "timed_out": timed_out,
+        "errors": error_count,
         "error_count": error_count,
     }
     if error_types:
@@ -295,6 +298,7 @@ def _run_speed_screen(bot_path, subclass, seed, race, background,
                     "total_steps": total_steps,
                     "elapsed_s": round(elapsed, 1),
                     "timed_out": 1,
+                    "errors": 0,
                     "error_count": 0,
                     "aborted": True,
                     "abort_reason": "too_slow",
@@ -331,6 +335,7 @@ def _run_speed_screen(bot_path, subclass, seed, race, background,
             "total_steps": total_steps,
             "elapsed_s": round(elapsed, 1),
             "timed_out": 0,
+            "errors": 0,
             "error_count": 0,
             "aborted": True,
             "abort_reason": "too_slow",
