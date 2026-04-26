@@ -86,10 +86,10 @@ The evaluator runs many episodes. Keep `player_fn` fast.
 
 When ready for evaluation, write the candidate bot to
 `/output/bot/bot.py`, write `eval_requested` to
-`/flywheel/control/termination_reason`, and finish your turn. Flywheel
+`/flywheel/termination_request`, and finish your turn. Flywheel
 will commit the bot artifact, invoke EvalBot, and feed the resulting
 score to the next ImproveBot step in this lane.
 
 If the bot is good enough to keep without another evaluation, write the
 candidate to `/output/bot/bot.py`, write `done` to
-`/flywheel/control/termination_reason`, and finish your turn.
+`/flywheel/termination_request`, and finish your turn.
