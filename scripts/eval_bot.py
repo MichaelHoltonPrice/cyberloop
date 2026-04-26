@@ -88,13 +88,15 @@ def main():
     print_summary(stats)
 
     # If the eval was aborted (speed screen or timeout gate),
-    # exit with code 2 so flywheel records it as a failed execution.
-    # Do not write a project termination reason on this path:
-    # non-zero exit is intentionally a substrate-level invoke failure.
+    # complete normally with the "aborted" termination reason so
+    # the score artifact gets promoted and the next agent in the
+    # lane can read it (the score JSON carries aborted=true and
+    # abort_reason / abort_message detail).
     if stats.get("aborted"):
         print(stats.get("abort_message", "Eval aborted"),
               file=sys.stderr)
-        sys.exit(2)
+        write_flywheel_termination("aborted")
+        return
     write_flywheel_termination("normal")
 
 
