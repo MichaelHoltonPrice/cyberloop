@@ -20,6 +20,7 @@ Usage:
 
 import argparse
 import json
+import os
 import random
 import sys
 from pathlib import Path
@@ -96,8 +97,12 @@ def main():
         print(stats.get("abort_message", "Eval aborted"),
               file=sys.stderr)
         write_flywheel_termination("aborted")
-        return
+        os._exit(0)
     write_flywheel_termination("normal")
+    # Force-exit to bypass ProcessPoolExecutor atexit cleanup, which
+    # can hang on lingering workers and leave the container alive
+    # forever after the eval result has already been written.
+    os._exit(0)
 
 
 if __name__ == "__main__":
