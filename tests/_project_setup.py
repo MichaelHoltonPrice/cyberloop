@@ -136,8 +136,6 @@ on_termination:
           - dueling
           - --episodes
           - ${params.eval_episodes}
-          - --n-workers
-          - "1"
 """
 
 
