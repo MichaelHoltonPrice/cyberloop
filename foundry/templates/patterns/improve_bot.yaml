@@ -27,3 +27,24 @@ steps:
       block: ImproveBot
       env:
         MODEL: ${params.model}
+  - name: improve_3
+    cohort:
+      min_successes: all
+      foreach: lanes
+      block: ImproveBot
+      env:
+        MODEL: ${params.model}
+  - name: improve_4
+    cohort:
+      min_successes: all
+      foreach: lanes
+      block: ImproveBot
+      env:
+        MODEL: ${params.model}
+  - name: improve_5
+    cohort:
+      min_successes: all
+      foreach: lanes
+      block: ImproveBot
+      env:
+        MODEL: ${params.model}

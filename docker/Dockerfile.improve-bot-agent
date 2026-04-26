@@ -1,3 +1,4 @@
 FROM flywheel-claude:latest
 
 COPY foundry/templates/assets/improve_bot_prompt/prompt.md /app/agent/prompt.md
+COPY foundry/templates/assets/improve_bot_mcp_servers /app/agent/mcp_servers

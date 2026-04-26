@@ -83,8 +83,8 @@ python -m pip install -e ".[dev]"
 Train and Eval can be run ad hoc through Flywheel's canonical one-shot
 container pipeline, and `train_eval` runs the same blocks as a pattern.
 Cyberloop also includes an `improve_bot` pattern: a Claude battery block edits
-`bot.py`, commits the result as a bot artifact on normal completion, and
-automatically invokes `EvalBot`.
+`bot.py`, requests evaluation through a battery-provided tool, commits the
+candidate as a bot artifact, and invokes `EvalBot`.
 The currently supported surface:
 
 - `foundry/templates/blocks/Train.yaml` runs `train_impala.py` and writes a
@@ -94,9 +94,9 @@ The currently supported surface:
 - `foundry/templates/blocks/EvalBot.yaml` runs `eval_bot.py` against a
   Python `bot.py` artifact and writes a `score` artifact.
 - `foundry/templates/blocks/ImproveBot.yaml` runs a Cyberloop image
-  derived from Flywheel's Claude battery and routes normal completion
-  to `EvalBot`. It mounts the checked-in Decker engine source as the
-  `game_engine` git artifact at `/source`.
+  derived from Flywheel's Claude battery and routes the `request_eval`
+  tool to `EvalBot`. It mounts the checked-in Decker engine source as
+  the `game_engine` git artifact at `/source`.
 - `foundry/templates/workspaces/cyberloop.yaml` declares the
   `game_engine`, `checkpoint`, `score`, and `bot` artifact contract.
 - `foundry/templates/patterns/train_eval.yaml` declares the canonical
@@ -113,7 +113,8 @@ The currently supported surface:
 ### Container images
 
 Build the Claude battery image, the Cyberloop eval image, then the
-Cyberloop image that bakes in the ImproveBot prompt:
+Cyberloop image that bakes in the ImproveBot prompt and request-eval
+MCP tool:
 
 ```bash
 docker build -f ../flywheel/batteries/claude/Dockerfile.claude -t flywheel-claude:latest ../flywheel/batteries/claude
@@ -170,14 +171,23 @@ ImproveBot runs use `COMPACT_TOKEN_LIMIT=200000`, so Claude compacts
 before context is too large to compact reliably. Sonnet patterns default
 to the 1M-context model name (`claude-sonnet-4-6[1m]`).
 
-The laptop-friendly two-lane Sonnet run is:
+The laptop-friendly two-lane Sonnet pattern gives each lane five
+ImproveBot segments. Each segment can save a candidate bot and call
+`request_eval`; the EvalBot result is returned to the resumed Claude
+session and is also available as `/input/score/scores.json` in the
+next segment. The Claude battery rewrites the persisted session before
+resume, so the agent sees the EvalBot result as the normal result of
+its `request_eval` tool call.
+
+Run it with:
 
 ```bash
 python -m flywheel run pattern improve_bot_sonnet_2lane --workspace foundry/workspaces/improve-bot-sonnet-2lane --template cyberloop
 ```
 
-The full three-lane ImproveBot pattern uses the same default 1M-context
-Sonnet model and 4000-episode EvalBot runs:
+The full three-lane ImproveBot pattern uses the same five-segment
+budget per lane, default 1M-context Sonnet model, and 4000-episode
+EvalBot runs:
 
 ```bash
 python -m flywheel run pattern improve_bot --workspace foundry/workspaces/<workspace> --template cyberloop

@@ -19,7 +19,7 @@ def player_fn(env, obs_json: str, action_labels: list[str]) -> int:
 provided labels.
 
 Start by copying `/input/bot/bot.py` to `/scratch/bot.py`. Edit only the
-scratch copy. If `/input/score/scores.json` exists, read it for feedback
+scratch copy. If `/input/score/scores.json` exists, read it for results
 from the previous evaluation in this lane.
 
 ## Source Files
@@ -82,8 +82,22 @@ The evaluator runs many episodes. Keep `player_fn` fast.
 - Avoid loops that can repeatedly play recycle cards without progress.
 - If `cards_played_this_turn` is high, force `EndTurn`.
 
-## Finish Protocol
+## Evaluation Protocol
 
-Write the candidate bot to `/output/bot/bot.py` and finish your turn.
-Flywheel will commit the bot artifact, invoke EvalBot automatically,
-and feed the resulting score to the next ImproveBot step in this lane.
+You have 5 evaluations available across this lane. Each time you want
+to use one, save your current candidate to `/output/bot/bot.py` and call
+`request_eval`. The returned result summarizes the evaluation metrics;
+the full JSON is also available at `/input/score/scores.json` on the
+next work segment.
+
+Do not call `request_eval` until `/output/bot/bot.py` contains the
+candidate you want evaluated. After all 5 evaluations are used, your
+last saved candidate is final.
+
+Call `request_eval` at most once per assistant turn. Any additional
+request in the same turn will be denied without running another
+evaluation.
+
+If `request_eval` returns an aborted result, inspect the abort reason in
+the returned result or `/input/score/scores.json`, then change the bot to
+avoid that failure mode before requesting another evaluation.

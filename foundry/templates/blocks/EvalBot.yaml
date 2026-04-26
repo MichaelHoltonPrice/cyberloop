@@ -13,5 +13,9 @@ inputs:
   - name: bot
     container_path: /input/bot
 outputs:
-  - name: score
-    container_path: /output/score
+  normal:
+    - name: score
+      container_path: /output/score
+  aborted:
+    - name: score
+      container_path: /output/score

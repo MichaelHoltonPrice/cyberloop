@@ -93,8 +93,12 @@ inputs:
   - name: bot
     container_path: /input/bot
 outputs:
-  - name: score
-    container_path: /output/score
+  normal:
+    - name: score
+      container_path: /output/score
+  aborted:
+    - name: score
+      container_path: /output/score
 """
 
 IMPROVE_BOT_BLOCK_YAML = """\
@@ -107,6 +111,13 @@ docker_args:
 env:
   MAX_TURNS: "400"
   COMPACT_TOKEN_LIMIT: "200000"
+  MCP_SERVER_MOUNT_DIR: /app/agent/mcp_servers
+  MCP_SERVERS: cyberloop
+  HANDOFF_TOOLS: mcp__cyberloop__request_eval
+  HANDOFF_TERMINATION_REASON: eval_requested
+  HANDOFF_REQUIRED_PATHS: /output/bot/bot.py
+  HANDOFF_RESULT_PATH: /input/score/scores.json
+  HANDOFF_RESULT_LABEL: Evaluation
 state: managed
 inputs:
   - name: game_engine
@@ -117,11 +128,14 @@ inputs:
     container_path: /input/score
     optional: true
 outputs:
+  eval_requested:
+    - name: bot
+      container_path: /output/bot
   normal:
     - name: bot
       container_path: /output/bot
 on_termination:
-  normal:
+  eval_requested:
     invoke:
       - block: EvalBot
         bind:

@@ -17,6 +17,7 @@ The ``project_setup`` fixture is provided by ``conftest.py``.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from flywheel.blocks.registry import BlockRegistry
@@ -135,9 +136,17 @@ class TestCyberloopTemplate:
         assert improve.inputs[1].optional is False
         assert improve.inputs[2].optional is True
         assert [slot.name for slot in improve.outputs_for("normal")] == ["bot"]
-        assert improve.outputs_for("eval_requested") == []
+        assert [slot.name for slot in improve.outputs_for(
+            "eval_requested")] == ["bot"]
         assert improve.outputs_for("done") == []
-        invocation = improve.on_termination["normal"][0]
+        assert improve.env["MCP_SERVERS"] == "cyberloop"
+        assert (
+            improve.env["HANDOFF_TOOLS"]
+            == "mcp__cyberloop__request_eval"
+        )
+        assert improve.env["HANDOFF_TERMINATION_REASON"] == "eval_requested"
+        assert improve.env["HANDOFF_REQUIRED_PATHS"] == "/output/bot/bot.py"
+        invocation = improve.on_termination["eval_requested"][0]
         assert invocation.block == "EvalBot"
         assert invocation.bind["bot"].parent_output == "bot"
         assert "--episodes" in invocation.args
@@ -147,6 +156,7 @@ class TestCyberloopTemplate:
         assert eval_bot.docker_args == ["--entrypoint", "python"]
         assert [slot.name for slot in eval_bot.inputs] == ["bot"]
         assert eval_bot.outputs_for("normal")[0].name == "score"
+        assert eval_bot.outputs_for("aborted")[0].name == "score"
 
     def test_improve_bot_agent_image_bakes_prompt(self):
         dockerfile = (
@@ -158,6 +168,31 @@ class TestCyberloopTemplate:
             "COPY foundry/templates/assets/improve_bot_prompt/prompt.md "
             "/app/agent/prompt.md"
         ) in text
+        assert (
+            "COPY foundry/templates/assets/improve_bot_mcp_servers "
+            "/app/agent/mcp_servers"
+        ) in text
+
+    def test_improve_bot_request_eval_mcp_manifest_matches_block(self):
+        server_dir = (
+            CYBERLOOP_ROOT
+            / "foundry"
+            / "templates"
+            / "assets"
+            / "improve_bot_mcp_servers"
+        )
+        manifest = json.loads(
+            (server_dir / "cyberloop_mcp_server.json").read_text(
+                encoding="utf-8")
+        )
+        server_text = (server_dir / "cyberloop_mcp_server.py").read_text(
+            encoding="utf-8")
+        registry = BlockRegistry.from_directory(
+            CYBERLOOP_ROOT / "foundry" / "templates" / "blocks")
+        improve = registry.get("ImproveBot")
+
+        assert "def request_eval()" in server_text
+        assert manifest["tools"] == [improve.env["HANDOFF_TOOLS"]]
 
 
 
@@ -207,10 +242,13 @@ class TestProductionFilesParseAgainstRegistry:
         assert [step.name for step in pattern.steps] == [
             "improve_1",
             "improve_2",
+            "improve_3",
+            "improve_4",
+            "improve_5",
         ]
         assert [
             (member.name, member.lane, member.block)
-            for member in pattern.steps[0].cohort.members
+            for member in pattern.steps[-1].cohort.members
         ] == [
             ("A", "A", "ImproveBot"),
             ("B", "B", "ImproveBot"),
@@ -242,7 +280,7 @@ class TestProductionFilesParseAgainstRegistry:
             "foundry/templates/assets/bots/baseline")
         assert [
             (member.name, member.lane, member.block)
-            for member in pattern.steps[0].cohort.members
+            for member in pattern.steps[-1].cohort.members
         ] == [
             ("A", "A", "ImproveBot"),
             ("B", "B", "ImproveBot"),
