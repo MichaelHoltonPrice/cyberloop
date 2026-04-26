@@ -166,21 +166,27 @@ The ImproveBot patterns materialize the checked-in baseline bot as a real
 artifact import step for these patterns.
 
 The pattern stores its resolved parameters on the Flywheel run record.
+ImproveBot runs use `COMPACT_TOKEN_LIMIT=200000`, so Claude compacts
+before context is too large to compact reliably. Sonnet patterns default
+to the 1M-context model name (`claude-sonnet-4-6[1m]`).
+
 The laptop-friendly two-lane Sonnet run is:
 
 ```bash
 python -m flywheel run pattern improve_bot_sonnet_2lane --workspace foundry/workspaces/improve-bot-sonnet-2lane --template cyberloop
 ```
 
-The full three-lane ImproveBot pattern uses the same default Sonnet model
-and 4000-episode EvalBot runs:
+The full three-lane ImproveBot pattern uses the same default 1M-context
+Sonnet model and 4000-episode EvalBot runs:
 
 ```bash
 python -m flywheel run pattern improve_bot --workspace foundry/workspaces/<workspace> --template cyberloop
 ```
 
 To run the three-lane pattern with Opus instead, override the model at run
-start. The resolved model is stored on the run record:
+start. Opus 4.7 uses the 1M context window by default; the same
+200K-token compaction limit still applies through the ImproveBot block
+environment. The resolved model is stored on the run record:
 
 ```bash
 python -m flywheel run pattern improve_bot --workspace foundry/workspaces/<workspace> --template cyberloop --param model=claude-opus-4-7

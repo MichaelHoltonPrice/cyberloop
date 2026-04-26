@@ -2,7 +2,7 @@ name: improve_bot
 params:
   model:
     type: string
-    default: claude-sonnet-4-6
+    default: claude-sonnet-4-6[1m]
   eval_episodes:
     type: int
     default: 4000

@@ -200,7 +200,7 @@ class TestProductionFilesParseAgainstRegistry:
         )
 
         assert pattern.lanes == ["A", "B", "C"]
-        assert pattern.params["model"].default == "claude-sonnet-4-6"
+        assert pattern.params["model"].default == "claude-sonnet-4-6[1m]"
         assert pattern.params["eval_episodes"].default == 4000
         assert pattern.fixtures["bot"].source == (
             "foundry/templates/assets/bots/baseline")
@@ -236,7 +236,7 @@ class TestProductionFilesParseAgainstRegistry:
 
         assert pattern.name == "improve_bot_sonnet_2lane"
         assert pattern.lanes == ["A", "B"]
-        assert pattern.params["model"].default == "claude-sonnet-4-6"
+        assert pattern.params["model"].default == "claude-sonnet-4-6[1m]"
         assert pattern.params["eval_episodes"].default == 4000
         assert pattern.fixtures["bot"].source == (
             "foundry/templates/assets/bots/baseline")
