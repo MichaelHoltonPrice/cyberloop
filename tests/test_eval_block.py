@@ -20,6 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from flywheel.blocks.registry import BlockRegistry
+from flywheel.pattern_declaration import PatternDeclaration
 from flywheel.template import Template
 
 CYBERLOOP_ROOT = Path(__file__).resolve().parent.parent
@@ -128,7 +129,7 @@ class TestCyberloopTemplate:
         assert improve.image == "cyberloop-improve-bot-agent:latest"
         assert improve.state == "managed"
         assert [slot.name for slot in improve.inputs] == ["bot"]
-        assert improve.inputs[0].optional is True
+        assert improve.inputs[0].optional is False
         assert [slot.name for slot in improve.outputs_for("eval_requested")] == [
             "bot"]
         assert [slot.name for slot in improve.outputs_for("done")] == ["bot"]
@@ -183,3 +184,28 @@ class TestProductionFilesParseAgainstRegistry:
         assert "ImproveBot" in [b.name for b in template.blocks]
         assert {a.name for a in template.artifacts} == {
             "checkpoint", "score", "bot"}
+
+    def test_improve_bot_pattern_declares_lanes_and_fixture(self):
+        pattern = PatternDeclaration.from_yaml(
+            CYBERLOOP_ROOT
+            / "foundry"
+            / "templates"
+            / "patterns"
+            / "improve_bot.yaml"
+        )
+
+        assert pattern.lanes == ["A", "B", "C"]
+        assert pattern.fixtures["bot"].source == (
+            "foundry/templates/assets/bots/baseline")
+        assert [step.name for step in pattern.steps] == [
+            "improve_1",
+            "improve_2",
+        ]
+        assert [
+            (member.name, member.lane, member.block)
+            for member in pattern.steps[0].cohort.members
+        ] == [
+            ("A", "A", "ImproveBot"),
+            ("B", "B", "ImproveBot"),
+            ("C", "C", "ImproveBot"),
+        ]

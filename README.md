@@ -78,7 +78,8 @@ The currently supported surface:
 - `foundry/templates/patterns/train_eval.yaml` declares the canonical
   Train to Eval pattern.
 - `foundry/templates/patterns/improve_bot.yaml` declares the agent-improves-bot
-  pattern.
+  pattern: three run-scoped lanes, each seeded from the checked-in
+  baseline bot fixture before the first ImproveBot execution.
 - `cyberloop.artifact_validators` validates checkpoint and score
   artifacts through Flywheel's `artifact_validators` hook.
 
@@ -90,10 +91,9 @@ docker build -f ../flywheel/batteries/claude/Dockerfile.claude -t flywheel-claud
 docker build -f docker/Dockerfile.improve-bot-agent -t cyberloop-improve-bot-agent:latest .
 ```
 
-The current ImproveBot block can start without a prior `bot`
-artifact. A checked-in starter bot may become a template-declared
-initial input in future work; it should not require a manual import
-step for the normal pattern.
+The `improve_bot` pattern materializes the checked-in baseline bot as
+a real `bot` artifact fixture for each lane at pattern start. There is
+no manual import step for the normal pattern.
 
 Ad hoc training uses the base Flywheel block command from the cyberloop root:
 

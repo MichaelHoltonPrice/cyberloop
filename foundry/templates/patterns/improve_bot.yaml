@@ -1,8 +1,18 @@
 name: improve_bot
+lanes:
+  - A
+  - B
+  - C
+fixtures:
+  bot: foundry/templates/assets/bots/baseline
 steps:
-  - name: improve
+  - name: improve_1
     cohort:
       min_successes: all
-      members:
-        - name: agent
-          block: ImproveBot
+      foreach: lanes
+      block: ImproveBot
+  - name: improve_2
+    cohort:
+      min_successes: all
+      foreach: lanes
+      block: ImproveBot

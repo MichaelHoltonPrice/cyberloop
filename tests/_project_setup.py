@@ -106,7 +106,6 @@ state: managed
 inputs:
   - name: bot
     container_path: /input/bot
-    optional: true
 outputs:
   eval_requested:
     - name: bot
