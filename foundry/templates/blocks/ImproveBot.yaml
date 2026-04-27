@@ -4,9 +4,12 @@ name: ImproveBot
 runner: container
 image: cyberloop-improve-bot-agent:latest
 docker_args:
+  - --cap-add
+  - NET_ADMIN
   - -v
   - claude-auth:/home/claude/.claude:rw
 env:
+  NETWORK_ISOLATION: "1"
   MAX_TURNS: "400"
   COMPACT_TOKEN_LIMIT: "200000"
   MCP_SERVER_MOUNT_DIR: /app/agent/mcp_servers
