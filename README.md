@@ -104,6 +104,9 @@ The currently supported surface:
 - `foundry/templates/patterns/improve_bot.yaml` declares the agent-improves-bot
   pattern: three run-scoped lanes, each seeded from the checked-in
   baseline bot fixture before running a lane-local ImproveBot loop.
+- `foundry/templates/patterns/improve_bot_sonnet_1lane.yaml` declares the
+  narrow Sonnet ImproveBot pattern: one run-scoped lane with a five-evaluation
+  budget.
 - `foundry/templates/patterns/improve_bot_sonnet_2lane.yaml` declares the
   laptop-friendly Sonnet ImproveBot pattern: two run-scoped lanes, each
   seeded from the same baseline bot fixture and run to completion before
@@ -172,15 +175,23 @@ ImproveBot runs use `COMPACT_TOKEN_LIMIT=200000`, so Claude compacts
 before context is too large to compact reliably. Sonnet patterns default
 to the 1M-context model name (`claude-sonnet-4-6[1m]`).
 
+The one-lane Sonnet pattern is the smallest full ImproveBot run. It runs one
+lane as a bounded loop with the five-evaluation budget:
+
+```bash
+python -m flywheel create workspace --name improve-bot-sonnet-1lane --template cyberloop
+python -m flywheel run pattern improve_bot_sonnet_1lane --workspace foundry/workspaces/improve-bot-sonnet-1lane --template cyberloop
+```
+
 The laptop-friendly two-lane Sonnet pattern runs each lane as a
 bounded loop. In one lane, ImproveBot keeps resuming the same managed
 Claude session until the agent exits normally or has used five
 `request_eval` calls. Each `request_eval` commits the candidate bot,
 invokes EvalBot, and returns the EvalBot result to the resumed Claude
-session; the score artifact is also mounted at `/input/score/scores.json`
-for the next ImproveBot iteration. The Claude battery rewrites the
-persisted session before resume, so the agent sees the EvalBot result
-as the normal result of its `request_eval` tool call.
+session via a resume prompt; the score artifact is also mounted at
+`/input/score/scores.json` for the next ImproveBot iteration. The
+`request_eval` tool result in session history remains an honest
+acknowledgement that evaluation was requested.
 
 Run it with:
 

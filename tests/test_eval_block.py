@@ -264,3 +264,22 @@ class TestProductionFilesParseAgainstRegistry:
             "foundry/templates/assets/bots/baseline")
         assert pattern.steps == []
         assert pattern.patterns["improve_bot_lane"].body
+
+    def test_improve_bot_sonnet_1lane_pattern_declares_one_lane(self):
+        pattern = PatternDeclaration.from_yaml(
+            CYBERLOOP_ROOT
+            / "foundry"
+            / "templates"
+            / "patterns"
+            / "improve_bot_sonnet_1lane.yaml"
+        )
+
+        assert pattern.name == "improve_bot_sonnet_1lane"
+        assert pattern.lanes == ["lane_0"]
+        assert pattern.params["model"].default == "claude-sonnet-4-6[1m]"
+        assert pattern.params["eval_episodes"].default == 4000
+        assert pattern.params["max_evals"].default == 5
+        assert pattern.fixtures["bot"].source == (
+            "foundry/templates/assets/bots/baseline")
+        assert pattern.steps == []
+        assert pattern.patterns["improve_bot_lane"].body

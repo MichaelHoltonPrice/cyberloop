@@ -34,12 +34,17 @@ def test_improve_bot_patterns_use_lane_local_loop_grammar():
     pattern_dir = (
         CYBERLOOP_ROOT / "foundry" / "templates" / "patterns")
     full = PatternDeclaration.from_yaml(pattern_dir / "improve_bot.yaml")
+    sonnet_1lane = PatternDeclaration.from_yaml(
+        pattern_dir / "improve_bot_sonnet_1lane.yaml")
     sonnet = PatternDeclaration.from_yaml(
         pattern_dir / "improve_bot_sonnet_2lane.yaml")
 
     assert full.steps == []
     assert full.lanes == ["lane_0", "lane_1", "lane_2"]
     assert full.patterns["improve_bot_lane"].body
+    assert sonnet_1lane.steps == []
+    assert sonnet_1lane.lanes == ["lane_0"]
+    assert sonnet_1lane.params["max_evals"].default == 5
     assert sonnet.steps == []
     assert sonnet.lanes == ["lane_0", "lane_1"]
     assert sonnet.params["max_evals"].default == 5
