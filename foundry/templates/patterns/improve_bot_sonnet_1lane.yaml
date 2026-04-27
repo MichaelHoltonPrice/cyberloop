@@ -8,7 +8,7 @@ params:
     default: 4000
   max_evals:
     type: int
-    default: 5
+    default: 3
 fixtures:
   bot: foundry/templates/assets/bots/baseline
 do:
