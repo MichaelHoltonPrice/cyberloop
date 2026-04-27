@@ -22,9 +22,12 @@ Start by copying `/input/bot/bot.py` to `/scratch/bot.py`. Edit only the
 scratch copy. If `/input/score/scores.json` exists, read it for results
 from the previous evaluation in this lane.
 
-Use `/scratch/.flywheel_scratchpad` for notes you want to preserve
-across work segments in this lane. Do not store candidate bots there;
-the candidate to evaluate must still be saved to `/output/bot/bot.py`.
+`/scratch/.flywheel_scratchpad` is a directory for notes you want to
+preserve across work segments in this lane. Store durable notes in files
+inside that directory, for example
+`/scratch/.flywheel_scratchpad/notes.md`. Do not delete or replace the
+scratchpad directory itself. Do not store candidate bots there; the
+candidate to evaluate must still be saved to `/output/bot/bot.py`.
 
 ## Source Files
 
