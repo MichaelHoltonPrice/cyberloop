@@ -22,6 +22,10 @@ Start by copying `/input/bot/bot.py` to `/scratch/bot.py`. Edit only the
 scratch copy. If `/input/score/scores.json` exists, read it for results
 from the previous evaluation in this lane.
 
+Use `/scratch/.flywheel_scratchpad` for notes you want to preserve
+across work segments in this lane. Do not store candidate bots there;
+the candidate to evaluate must still be saved to `/output/bot/bot.py`.
+
 ## Source Files
 
 Read the game source before making strategy changes. The engine is
@@ -86,9 +90,10 @@ The evaluator runs many episodes. Keep `player_fn` fast.
 
 You have 5 evaluations available across this lane. Each time you want
 to use one, save your current candidate to `/output/bot/bot.py` and call
-`request_eval`. The returned result summarizes the evaluation metrics;
-the full JSON is also available at `/input/score/scores.json` on the
-next work segment.
+`request_eval`. The tool response only acknowledges that evaluation was
+requested; it is not the score. Stop work after requesting evaluation.
+On the next work segment, read `/input/score/scores.json` for the actual
+evaluation result.
 
 Do not call `request_eval` until `/output/bot/bot.py` contains the
 candidate you want evaluated. After all 5 evaluations are used, your
@@ -98,6 +103,6 @@ Call `request_eval` at most once per assistant turn. Any additional
 request in the same turn will be denied without running another
 evaluation.
 
-If `request_eval` returns an aborted result, inspect the abort reason in
-the returned result or `/input/score/scores.json`, then change the bot to
-avoid that failure mode before requesting another evaluation.
+If the evaluation result reports an abort, inspect the abort reason in
+`/input/score/scores.json`, then change the bot to avoid that failure
+mode before requesting another evaluation.
