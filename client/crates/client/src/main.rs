@@ -202,7 +202,7 @@ fn export_game_state(run_data: Option<Res<plugins::RunData>>) {
 
     let obs = run_data.runner.observe();
     if let Ok(json) = serde_json::to_string_pretty(&obs) {
-        let _ = std::fs::write(&export_path, &json);
+        let _ = atomic_write_text(std::path::Path::new(&export_path), &json);
     }
 
     // Write legal action labels for bot consumption
@@ -214,14 +214,28 @@ fn export_game_state(run_data: Option<Res<plugins::RunData>>) {
         .map(|a| format!("{:?}", a))
         .collect();
     if let Ok(json) = serde_json::to_string_pretty(&action_labels) {
-        let _ = std::fs::write(&actions_path, &json);
+        let _ = atomic_write_text(std::path::Path::new(&actions_path), &json);
     }
 
     // Also write full save state for save/load
     let save_path = format!("{}.save", export_path.trim_end_matches(".json"));
     if let Ok(json) = serde_json::to_string_pretty(&run_data.runner) {
-        let _ = std::fs::write(&save_path, &json);
+        let _ = atomic_write_text(std::path::Path::new(&save_path), &json);
     }
+}
+
+fn atomic_write_text(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension(format!(
+        "{}.tmp",
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("out")
+    ));
+    std::fs::write(&tmp, contents)?;
+    std::fs::rename(tmp, path)
 }
 
 fn compute_scale_and_viewport(window: &Window) -> (f32, Viewport) {

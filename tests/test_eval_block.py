@@ -100,6 +100,9 @@ class TestCyberloopTemplate:
             "bot": "copy",
             "decker_state": "copy",
             "cua_trace": "copy",
+            "game_step": "copy",
+            "gui_action_decider": "copy",
+            "escalation_request": "copy",
         }
 
     def test_eval_block_in_template(self, project_setup):
@@ -112,6 +115,9 @@ class TestCyberloopTemplate:
             "ImproveBot",
             "DeckerDesktop",
             "CuaPlayAgent",
+            "StepThroughGui",
+            "GuiEscalationGate",
+            "ImproveGuiActionDecider",
         ]
 
     def test_train_block_in_template(self, project_setup):
@@ -331,6 +337,56 @@ class TestCyberloopTemplate:
         assert "def finish_segment()" in server_text
         assert agent.env["HANDOFF_TOOLS"] in manifest["tools"]
 
+    def test_bot_gui_escalation_blocks_are_wired(self, project_setup):
+        _, template, _ = project_setup
+        step = next(b for b in template.blocks if b.name == "StepThroughGui")
+        gate = next(b for b in template.blocks if b.name == "GuiEscalationGate")
+        improver = next(
+            b for b in template.blocks
+            if b.name == "ImproveGuiActionDecider")
+
+        assert step.image == "cyberloop-gui-step:latest"
+        assert "--network=cyberloop-cua" in step.docker_args
+        assert step.env["SNAP_TO_PREDICTION_ON_MISMATCH"] == "false"
+        assert [slot.name for slot in step.inputs] == [
+            "bot", "gui_action_decider", "decker_state"]
+        assert step.inputs[2].optional is True
+        assert [slot.name for slot in step.outputs_for("action_taken")] == [
+            "decker_state", "game_step", "cua_trace"]
+        game_step = step.outputs_for("action_taken")[1]
+        assert game_step.sequence is not None
+        assert game_step.sequence.name == "decker_gui_game"
+        assert game_step.sequence.scope == "enclosing_lane"
+        trace = step.outputs_for("action_taken")[2]
+        assert trace.sequence is not None
+        assert trace.sequence.name == "gui_step_trace"
+        assert [slot.name for slot in step.outputs_for("bot_error")] == [
+            "decker_state", "game_step", "cua_trace"]
+
+        assert gate.image == "cyberloop-gui-escalation-gate:latest"
+        assert gate.inputs[0].sequence is not None
+        assert gate.inputs[0].sequence.name == "decker_gui_game"
+        invocation = gate.on_termination["escalation_requested"][0]
+        assert invocation.block == "ImproveGuiActionDecider"
+        assert invocation.bind["escalation_request"].parent_output == (
+            "escalation_request")
+
+        assert improver.image == (
+            "cyberloop-improve-gui-action-decider-agent:latest")
+        assert improver.env["MODEL"] == "claude-sonnet-4-6[1m]"
+        assert [slot.name for slot in improver.inputs] == [
+            "escalation_request",
+            "gui_action_decider",
+            "game_step",
+            "cua_trace",
+            "game_step_history",
+            "gui_step_trace_history",
+        ]
+        assert improver.inputs[5].sequence is not None
+        assert improver.inputs[5].sequence.name == "gui_step_trace"
+        assert [slot.name for slot in improver.outputs_for("normal")] == [
+            "gui_action_decider"]
+
 
 
 class TestProductionFilesParseAgainstRegistry:
@@ -355,6 +411,9 @@ class TestProductionFilesParseAgainstRegistry:
             "ImproveBot",
             "DeckerDesktop",
             "CuaPlayAgent",
+            "StepThroughGui",
+            "GuiEscalationGate",
+            "ImproveGuiActionDecider",
         }.issubset(
             set(registry.names()))
 
@@ -368,6 +427,9 @@ class TestProductionFilesParseAgainstRegistry:
         assert "ImproveBot" in [b.name for b in template.blocks]
         assert "DeckerDesktop" in [b.name for b in template.blocks]
         assert "CuaPlayAgent" in [b.name for b in template.blocks]
+        assert "StepThroughGui" in [b.name for b in template.blocks]
+        assert "GuiEscalationGate" in [b.name for b in template.blocks]
+        assert "ImproveGuiActionDecider" in [b.name for b in template.blocks]
         assert {a.name for a in template.artifacts} == {
             "game_engine",
             "checkpoint",
@@ -375,6 +437,9 @@ class TestProductionFilesParseAgainstRegistry:
             "bot",
             "decker_state",
             "cua_trace",
+            "game_step",
+            "gui_action_decider",
+            "escalation_request",
         }
 
     def test_improve_bot_pattern_declares_lanes_and_fixture(self):
@@ -454,3 +519,27 @@ class TestProductionFilesParseAgainstRegistry:
         assert pattern.body
         run_until = pattern.body[0]
         assert run_until.fail_on == ["desktop_unreachable"]
+
+    def test_bot_gui_escalate_pattern_uses_step_and_gate_loop(self):
+        pattern = PatternDeclaration.from_yaml(
+            CYBERLOOP_ROOT
+            / "foundry"
+            / "templates"
+            / "patterns"
+            / "bot_gui_escalate_sonnet_1lane.yaml"
+        )
+
+        assert pattern.name == "bot_gui_escalate_sonnet_1lane"
+        assert pattern.params["max_actions"].default == 50
+        assert pattern.params["escalation_interval"].default == 0
+        assert pattern.params["snap_to_prediction_on_mismatch"].default is False
+        assert pattern.fixtures["bot"].source == (
+            "foundry/templates/assets/bots/baseline")
+        assert pattern.fixtures["gui_action_decider"].source == (
+            "foundry/templates/assets/gui_action_decider_seed")
+        run_until = pattern.body[0]
+        assert run_until.block == "StepThroughGui"
+        assert set(run_until.continue_on) == {"action_taken"}
+        assert run_until.stop_on == ["game_over"]
+        assert run_until.fail_on == ["desktop_unreachable", "bot_error"]
+        assert run_until.after_every[0].reason == "action_taken"

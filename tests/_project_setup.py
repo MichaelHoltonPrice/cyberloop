@@ -47,6 +47,12 @@ artifacts:
     kind: copy
   - name: cua_trace
     kind: copy
+  - name: game_step
+    kind: copy
+  - name: gui_action_decider
+    kind: copy
+  - name: escalation_request
+    kind: copy
 
 blocks:
   - Train
@@ -55,6 +61,9 @@ blocks:
   - ImproveBot
   - DeckerDesktop
   - CuaPlayAgent
+  - StepThroughGui
+  - GuiEscalationGate
+  - ImproveGuiActionDecider
 """
 
 DECKER_DESKTOP_BLOCK_YAML = """\
@@ -129,6 +138,161 @@ outputs:
         name: cua_trace
         scope: enclosing_lane
         role: segment_trace
+"""
+
+STEP_THROUGH_GUI_BLOCK_YAML = """\
+name: StepThroughGui
+runner: container
+image: cyberloop-gui-step:latest
+docker_args:
+  - --network=cyberloop-cua
+env:
+  DESKTOP_URL: http://decker-desktop:8080
+  SUBCLASS: dueling
+  RACE: human
+  BACKGROUND: soldier
+  SEED: "1"
+  POST_ACTION_WAIT_MS: "800"
+  SNAP_TO_PREDICTION_ON_MISMATCH: "false"
+state: none
+inputs:
+  - name: bot
+    container_path: /input/bot
+  - name: gui_action_decider
+    container_path: /input/gui_action_decider
+  - name: decker_state
+    container_path: /input/decker_state
+    optional: true
+outputs:
+  action_taken:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: game_step
+      container_path: /output/game_step
+      sequence:
+        name: decker_gui_game
+        scope: enclosing_lane
+        role: game_step
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: gui_step_trace
+        scope: enclosing_lane
+        role: gui_step_trace
+  game_over:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: game_step
+      container_path: /output/game_step
+      sequence:
+        name: decker_gui_game
+        scope: enclosing_lane
+        role: game_step
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: gui_step_trace
+        scope: enclosing_lane
+        role: gui_step_trace
+  desktop_unreachable:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: game_step
+      container_path: /output/game_step
+      sequence:
+        name: decker_gui_game
+        scope: enclosing_lane
+        role: game_step
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: gui_step_trace
+        scope: enclosing_lane
+        role: gui_step_trace
+  bot_error:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: game_step
+      container_path: /output/game_step
+      sequence:
+        name: decker_gui_game
+        scope: enclosing_lane
+        role: game_step
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: gui_step_trace
+        scope: enclosing_lane
+        role: gui_step_trace
+"""
+
+GUI_ESCALATION_GATE_BLOCK_YAML = """\
+name: GuiEscalationGate
+runner: container
+image: cyberloop-gui-escalation-gate:latest
+state: none
+env:
+  ESCALATION_INTERVAL: "0"
+inputs:
+  - name: game_step_history
+    container_path: /input/game_step_history
+    sequence:
+      name: decker_gui_game
+      scope: enclosing_lane
+outputs:
+  escalation_requested:
+    - name: escalation_request
+      container_path: /output/escalation_request
+      sequence:
+        name: gui_escalation
+        scope: enclosing_lane
+        role: request
+  normal: []
+on_termination:
+  escalation_requested:
+    invoke:
+      - block: ImproveGuiActionDecider
+        bind:
+          escalation_request: escalation_request
+"""
+
+IMPROVE_GUI_ACTION_DECIDER_BLOCK_YAML = """\
+name: ImproveGuiActionDecider
+runner: container
+image: cyberloop-improve-gui-action-decider-agent:latest
+docker_args:
+  - -v
+  - claude-auth:/home/claude/.claude:rw
+env:
+  MAX_TURNS: "200"
+  MODEL: claude-sonnet-4-6[1m]
+  COMPACT_TOKEN_LIMIT: "200000"
+  TOOLS: Read,Write,Edit,Glob,Grep,Bash
+  ALLOWED_TOOLS: Read,Write,Edit,Glob,Grep,Bash
+state: none
+inputs:
+  - name: escalation_request
+    container_path: /input/escalation_request
+  - name: gui_action_decider
+    container_path: /input/gui_action_decider
+  - name: game_step
+    container_path: /input/game_step
+  - name: cua_trace
+    container_path: /input/cua_trace
+  - name: game_step_history
+    container_path: /input/game_step_history
+    sequence:
+      name: decker_gui_game
+      scope: enclosing_lane
+  - name: gui_step_trace_history
+    container_path: /input/gui_step_trace_history
+    sequence:
+      name: gui_step_trace
+      scope: enclosing_lane
+outputs:
+  normal:
+    - name: gui_action_decider
+      container_path: /output/gui_action_decider
 """
 
 TRAIN_BLOCK_YAML = """\
@@ -265,6 +429,12 @@ def build_project(
     (blocks_dir / "ImproveBot.yaml").write_text(IMPROVE_BOT_BLOCK_YAML)
     (blocks_dir / "DeckerDesktop.yaml").write_text(DECKER_DESKTOP_BLOCK_YAML)
     (blocks_dir / "CuaPlayAgent.yaml").write_text(CUA_PLAY_AGENT_BLOCK_YAML)
+    (blocks_dir / "StepThroughGui.yaml").write_text(
+        STEP_THROUGH_GUI_BLOCK_YAML)
+    (blocks_dir / "GuiEscalationGate.yaml").write_text(
+        GUI_ESCALATION_GATE_BLOCK_YAML)
+    (blocks_dir / "ImproveGuiActionDecider.yaml").write_text(
+        IMPROVE_GUI_ACTION_DECIDER_BLOCK_YAML)
     registry = BlockRegistry.from_directory(blocks_dir)
 
     workspaces = project / "foundry" / "workspaces"

@@ -1,0 +1,28 @@
+# Decides whether the latest GUI step should invoke the code-improvement agent.
+name: GuiEscalationGate
+runner: container
+image: cyberloop-gui-escalation-gate:latest
+state: none
+env:
+  ESCALATION_INTERVAL: "0"
+inputs:
+  - name: game_step_history
+    container_path: /input/game_step_history
+    sequence:
+      name: decker_gui_game
+      scope: enclosing_lane
+outputs:
+  escalation_requested:
+    - name: escalation_request
+      container_path: /output/escalation_request
+      sequence:
+        name: gui_escalation
+        scope: enclosing_lane
+        role: request
+  normal: []
+on_termination:
+  escalation_requested:
+    invoke:
+      - block: ImproveGuiActionDecider
+        bind:
+          escalation_request: escalation_request

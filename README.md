@@ -104,9 +104,18 @@ The currently supported surface:
 - `foundry/templates/blocks/CuaPlayAgent.yaml` runs a Claude controller
   that drives `DeckerDesktop` through computer-use tools and writes
   `decker_state` and `cua_trace` artifacts at segment exit.
+- `foundry/templates/blocks/StepThroughGui.yaml` runs deterministic
+  one-action GUI checks: `bot.py` chooses a semantic engine action, the
+  Rust engine predicts the post-action state, editable GUI action code
+  executes clicks/keys through `DeckerDesktop`, and the exported state is
+  compared to the prediction.
+- `foundry/templates/blocks/GuiEscalationGate.yaml` inspects the latest
+  GUI game step and invokes `ImproveGuiActionDecider` when execution fails
+  or the actual GUI-backed state diverges from the engine prediction.
 - `foundry/templates/workspaces/cyberloop.yaml` declares the
-  `game_engine`, `checkpoint`, `score`, `bot`, `decker_state`, and
-  `cua_trace` artifact contract.
+  `game_engine`, `checkpoint`, `score`, `bot`, `decker_state`,
+  `cua_trace`, `game_step`, `gui_action_decider`, and
+  `escalation_request` artifact contract.
 - `foundry/templates/patterns/train_eval.yaml` declares the canonical
   Train to Eval pattern.
 - `foundry/templates/patterns/improve_bot.yaml` declares the agent-improves-bot
@@ -119,6 +128,11 @@ The currently supported surface:
   laptop-friendly Sonnet ImproveBot pattern: two run-scoped lanes, each
   seeded from the same baseline bot fixture and run to completion before
   the next lane starts.
+- `foundry/templates/patterns/bot_gui_escalate_sonnet_1lane.yaml` declares
+  the deterministic bot-through-GUI loop. It seeds `bot.py` and
+  `gui_action_decider.py`, runs one GUI action per iteration, and escalates
+  to a Sonnet code-improvement agent only when the GUI action code fails to
+  reproduce the Rust engine's predicted state.
 - `cyberloop.artifact_validators` validates checkpoint and score
   artifacts through Flywheel's `artifact_validators` hook.
 
@@ -134,6 +148,9 @@ docker build -f docker/Dockerfile.eval -t cyberloop-eval:latest .
 docker build -f docker/Dockerfile.improve-bot-agent -t cyberloop-improve-bot-agent:latest .
 docker build -f docker/Dockerfile.decker-desktop -t cyberloop-decker-desktop:latest .
 docker build -f docker/Dockerfile.cua-play-agent -t cyberloop-cua-play-agent:latest .
+docker build -f docker/Dockerfile.gui-step -t cyberloop-gui-step:latest .
+docker build -f docker/Dockerfile.gui-escalation-gate -t cyberloop-gui-escalation-gate:latest .
+docker build -f docker/Dockerfile.improve-gui-action-decider-agent -t cyberloop-improve-gui-action-decider-agent:latest .
 ```
 
 ### Claude auth volume
@@ -270,6 +287,34 @@ The warm-up command records a normal no-op `DeckerDesktop` execution each time
 it starts or health-checks the persistent container. That ledger row is the
 current cost of using the ordinary `flywheel run block` surface instead of a
 separate service-start command.
+
+The bot-through-GUI escalation pattern uses the same persistent desktop
+service, but does not use a play agent. `StepThroughGui` loads the latest
+`decker_state` artifact, asks `bot.py` for one legal semantic engine action,
+predicts the post-action state with the Rust engine, loads the pre-action save
+into the GUI, executes the action with `gui_action_decider.py`, exports the
+actual GUI-backed save, and writes a `game_step` artifact with the normalized
+prediction comparison. `GuiEscalationGate` invokes the code-improvement agent
+only when that comparison fails or the GUI action code raises.
+
+Run it with a warmed desktop:
+
+```bash
+python -m flywheel create workspace --name bot-gui-escalate-sonnet-1lane --template cyberloop
+python -m flywheel run block DeckerDesktop --workspace foundry/workspaces/bot-gui-escalate-sonnet-1lane --template cyberloop
+python -m flywheel run pattern bot_gui_escalate_sonnet_1lane --workspace foundry/workspaces/bot-gui-escalate-sonnet-1lane --template cyberloop
+```
+
+The loop is bounded by `max_actions` and can be resumed with Flywheel's pattern
+resume support if you later raise that budget. The GUI action code artifact is
+append-only like any other Flywheel artifact: each successful escalation
+produces a new `gui_action_decider` version, and subsequent iterations in the
+same lane resolve the latest version.
+
+`StepThroughGui` appends per-action trace artifacts to a dedicated
+lane-scoped `gui_step_trace` sequence. This is intentionally separate from
+the CUA play-agent `cua_trace` sequence because the two trace artifact schemas
+serve different workflows.
 
 `train_eval` is the currently supported RL checkpoint pattern:
 

@@ -1,0 +1,38 @@
+# Deterministic GUI step block: bot semantic action -> GUI execution check.
+#
+# Build from the cyberloop root:
+#   docker build -f docker/Dockerfile.gui-step -t cyberloop-gui-step:latest .
+
+FROM python:3.12-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl build-essential pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN pip install --no-cache-dir maturin
+
+COPY Cargo.toml /build/
+COPY crates/engine/ /build/crates/engine/
+COPY crates/content/ /build/crates/content/
+COPY crates/gauntlet/ /build/crates/gauntlet/
+COPY crates/pyenv/ /build/crates/pyenv/
+
+WORKDIR /build/crates/pyenv
+RUN maturin build --release --interpreter python3.12 -o /build/wheels/
+
+FROM python:3.12-slim
+
+COPY --from=builder /build/wheels/*.whl /tmp/wheels/
+RUN pip install --no-cache-dir /tmp/wheels/*.whl && rm -rf /tmp/wheels
+
+COPY scripts/action_parser.py /app/scripts/action_parser.py
+COPY scripts/gui_state_compare.py /app/scripts/gui_state_compare.py
+COPY scripts/gui_play_step.py /app/scripts/gui_play_step.py
+COPY scripts/gui_escalation_gate.py /app/scripts/gui_escalation_gate.py
+
+WORKDIR /app/scripts
+ENTRYPOINT ["python", "gui_play_step.py"]

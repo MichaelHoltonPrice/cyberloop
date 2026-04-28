@@ -1,0 +1,37 @@
+# Claude agent that improves the GUI action decider code.
+name: ImproveGuiActionDecider
+runner: container
+image: cyberloop-improve-gui-action-decider-agent:latest
+docker_args:
+  - -v
+  - claude-auth:/home/claude/.claude:rw
+env:
+  MAX_TURNS: "200"
+  MODEL: claude-sonnet-4-6[1m]
+  COMPACT_TOKEN_LIMIT: "200000"
+  TOOLS: Read,Write,Edit,Glob,Grep,Bash
+  ALLOWED_TOOLS: Read,Write,Edit,Glob,Grep,Bash
+state: none
+inputs:
+  - name: escalation_request
+    container_path: /input/escalation_request
+  - name: gui_action_decider
+    container_path: /input/gui_action_decider
+  - name: game_step
+    container_path: /input/game_step
+  - name: cua_trace
+    container_path: /input/cua_trace
+  - name: game_step_history
+    container_path: /input/game_step_history
+    sequence:
+      name: decker_gui_game
+      scope: enclosing_lane
+  - name: gui_step_trace_history
+    container_path: /input/gui_step_trace_history
+    sequence:
+      name: gui_step_trace
+      scope: enclosing_lane
+outputs:
+  normal:
+    - name: gui_action_decider
+      container_path: /output/gui_action_decider

@@ -8,10 +8,11 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from flywheel.cli import main
 from flywheel.container import ContainerResult
 from flywheel.pattern_declaration import PatternDeclaration
-from flywheel.pattern_execution import run_pattern
+from flywheel.pattern_execution import PatternRunError, run_pattern
 from flywheel.workspace import Workspace
 
 CYBERLOOP_ROOT = Path(__file__).resolve().parent.parent
@@ -149,6 +150,233 @@ def test_improve_bot_sonnet_2lane_pattern_runs_lane_local_loop(
         score_exec.output_bindings["score"])
 
 
+def test_bot_gui_escalate_pattern_runs_gate_and_improver(project_setup):
+    ws, template, project = project_setup
+    baseline = project / "foundry" / "templates" / "assets" / "bots" / "baseline"
+    baseline.mkdir(parents=True)
+    (baseline / "bot.py").write_text("BOT", encoding="utf-8")
+    gui_seed = (
+        project / "foundry" / "templates" / "assets"
+        / "gui_action_decider_seed")
+    gui_seed.mkdir(parents=True)
+    (gui_seed / "gui_action_decider.py").write_text(
+        "def plan_actions(context):\n    return []\n",
+        encoding="utf-8",
+    )
+    patterns = project / "foundry" / "templates" / "patterns"
+    patterns.mkdir(parents=True)
+    shutil.copy2(
+        CYBERLOOP_ROOT / "foundry" / "templates" / "patterns"
+        / "bot_gui_escalate_sonnet_1lane.yaml",
+        patterns / "bot_gui_escalate_sonnet_1lane.yaml",
+    )
+    pattern = PatternDeclaration.from_yaml(
+        patterns / "bot_gui_escalate_sonnet_1lane.yaml")
+    calls: list[str] = []
+    step_calls = 0
+
+    def fake_run_container(config, args=None):
+        nonlocal step_calls
+        del args
+        calls.append(config.image)
+        all_mounts = {
+            container: Path(host)
+            for host, container, _mode in config.mounts
+        }
+        writable_mounts = {
+            container: Path(host)
+            for host, container, mode in config.mounts
+            if mode == "rw"
+        }
+        (writable_mounts["/flywheel"] / "termination").write_text(
+            "normal", encoding="utf-8")
+        if config.image == "cyberloop-gui-step:latest":
+            step_calls += 1
+            if step_calls == 2:
+                mounted = (
+                    all_mounts["/input/gui_action_decider"]
+                    / "gui_action_decider.py"
+                ).read_text(encoding="utf-8")
+                assert "# v2" in mounted
+            _write_decker_state(writable_mounts["/output/decker_state"])
+            _write_game_step(
+                writable_mounts["/output/game_step"],
+                prediction_correct=step_calls == 2,
+            )
+            _write_trace(writable_mounts["/output/cua_trace"])
+            (writable_mounts["/flywheel"] / "termination").write_text(
+                "action_taken", encoding="utf-8")
+            return ContainerResult(exit_code=0, elapsed_s=0.1)
+        if config.image == "cyberloop-gui-escalation-gate:latest":
+            if step_calls == 1:
+                out = writable_mounts["/output/escalation_request"]
+                out.mkdir(parents=True, exist_ok=True)
+                (out / "escalation_request.json").write_text(json.dumps({
+                    "reason": "prediction_mismatch",
+                }), encoding="utf-8")
+                (writable_mounts["/flywheel"] / "termination").write_text(
+                    "escalation_requested", encoding="utf-8")
+            return ContainerResult(exit_code=0, elapsed_s=0.1)
+        if config.image == "cyberloop-improve-gui-action-decider-agent:latest":
+            out = writable_mounts["/output/gui_action_decider"]
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "gui_action_decider.py").write_text(
+                "# v2\ndef plan_actions(context):\n    return []\n",
+                encoding="utf-8",
+            )
+            return ContainerResult(exit_code=0, elapsed_s=0.1)
+        raise AssertionError(config.image)
+
+    with patch(
+        "flywheel.execution.run_container",
+        side_effect=fake_run_container,
+    ):
+        result = run_pattern(
+            ws,
+            pattern,
+            template,
+            project,
+            param_overrides={"max_actions": "2"},
+        )
+
+    reloaded = Workspace.load(ws.path)
+    run = reloaded.runs[result.run_id]
+    assert run.status == "succeeded"
+    assert calls == [
+        "cyberloop-gui-step:latest",
+        "cyberloop-gui-escalation-gate:latest",
+        "cyberloop-improve-gui-action-decider-agent:latest",
+        "cyberloop-gui-step:latest",
+        "cyberloop-gui-escalation-gate:latest",
+    ]
+    assert run.steps[0].kind == "run_until"
+    assert run.steps[0].stop_kind == "budget_exhausted"
+    assert len(reloaded.sequence_entries) == 5
+    assert any(
+        entry.sequence_name == "gui_step_trace"
+        for entry in reloaded.sequence_entries
+    )
+    assert any(
+        entry.sequence_name == "gui_escalation"
+        for entry in reloaded.sequence_entries
+    )
+
+
+def test_bot_gui_escalate_pattern_fails_cleanly_on_desktop_unreachable(
+    project_setup,
+):
+    ws, template, project = project_setup
+    _prepare_bot_gui_pattern_assets(project)
+    pattern = PatternDeclaration.from_yaml(
+        project / "foundry" / "templates" / "patterns"
+        / "bot_gui_escalate_sonnet_1lane.yaml")
+
+    def fake_run_container(config, args=None):
+        del args
+        mounts = {
+            container: Path(host)
+            for host, container, mode in config.mounts
+            if mode == "rw"
+        }
+        (mounts["/flywheel"] / "termination").write_text(
+            "normal", encoding="utf-8")
+        assert config.image == "cyberloop-gui-step:latest"
+        _write_decker_state(mounts["/output/decker_state"])
+        _write_game_step(mounts["/output/game_step"], prediction_correct=False)
+        _write_trace(mounts["/output/cua_trace"])
+        (mounts["/flywheel"] / "termination").write_text(
+            "desktop_unreachable", encoding="utf-8")
+        return ContainerResult(exit_code=0, elapsed_s=0.1)
+
+    with patch(
+        "flywheel.execution.run_container",
+        side_effect=fake_run_container,
+    ):
+        with pytest.raises(PatternRunError, match="desktop_unreachable"):
+            run_pattern(ws, pattern, template, project)
+
+    run = next(iter(Workspace.load(ws.path).runs.values()))
+    assert run.status == "failed"
+    assert run.steps[0].stop_kind == "fail_on"
+    assert run.steps[0].terminal_reason == "desktop_unreachable"
+
+
+def test_bot_gui_escalate_pattern_stops_cleanly_on_game_over(project_setup):
+    ws, template, project = project_setup
+    _prepare_bot_gui_pattern_assets(project)
+    pattern = PatternDeclaration.from_yaml(
+        project / "foundry" / "templates" / "patterns"
+        / "bot_gui_escalate_sonnet_1lane.yaml")
+    calls: list[str] = []
+
+    def fake_run_container(config, args=None):
+        del args
+        calls.append(config.image)
+        mounts = {
+            container: Path(host)
+            for host, container, mode in config.mounts
+            if mode == "rw"
+        }
+        (mounts["/flywheel"] / "termination").write_text(
+            "normal", encoding="utf-8")
+        assert config.image == "cyberloop-gui-step:latest"
+        _write_decker_state(mounts["/output/decker_state"])
+        _write_game_step(mounts["/output/game_step"], prediction_correct=True)
+        _write_trace(mounts["/output/cua_trace"])
+        (mounts["/flywheel"] / "termination").write_text(
+            "game_over", encoding="utf-8")
+        return ContainerResult(exit_code=0, elapsed_s=0.1)
+
+    with patch(
+        "flywheel.execution.run_container",
+        side_effect=fake_run_container,
+    ):
+        result = run_pattern(ws, pattern, template, project)
+
+    run = Workspace.load(ws.path).runs[result.run_id]
+    assert run.status == "succeeded"
+    assert run.steps[0].stop_kind == "stop_on"
+    assert run.steps[0].terminal_reason == "game_over"
+    assert calls == ["cyberloop-gui-step:latest"]
+
+
+def test_bot_gui_escalate_pattern_fails_cleanly_on_bot_error(project_setup):
+    ws, template, project = project_setup
+    _prepare_bot_gui_pattern_assets(project)
+    pattern = PatternDeclaration.from_yaml(
+        project / "foundry" / "templates" / "patterns"
+        / "bot_gui_escalate_sonnet_1lane.yaml")
+
+    def fake_run_container(config, args=None):
+        del args
+        mounts = {
+            container: Path(host)
+            for host, container, mode in config.mounts
+            if mode == "rw"
+        }
+        (mounts["/flywheel"] / "termination").write_text(
+            "normal", encoding="utf-8")
+        assert config.image == "cyberloop-gui-step:latest"
+        _write_decker_state(mounts["/output/decker_state"])
+        _write_game_step(mounts["/output/game_step"], prediction_correct=False)
+        _write_trace(mounts["/output/cua_trace"])
+        (mounts["/flywheel"] / "termination").write_text(
+            "bot_error", encoding="utf-8")
+        return ContainerResult(exit_code=0, elapsed_s=0.1)
+
+    with patch(
+        "flywheel.execution.run_container",
+        side_effect=fake_run_container,
+    ):
+        with pytest.raises(PatternRunError, match="bot_error"):
+            run_pattern(ws, pattern, template, project)
+
+    run = next(iter(Workspace.load(ws.path).runs.values()))
+    assert run.status == "failed"
+    assert run.steps[0].stop_kind == "fail_on"
+    assert run.steps[0].terminal_reason == "bot_error"
+
+
 def test_train_eval_pattern_runs_through_base_flywheel_cli(
     project_setup,
     monkeypatch,
@@ -205,6 +433,27 @@ def test_train_eval_pattern_runs_through_base_flywheel_cli(
         ["--subclass", "dueling", "--combat-only"],
         ["--episodes", "4000", "--backend", "numpy"],
     ]
+
+
+def _prepare_bot_gui_pattern_assets(project: Path) -> None:
+    baseline = project / "foundry" / "templates" / "assets" / "bots" / "baseline"
+    baseline.mkdir(parents=True)
+    (baseline / "bot.py").write_text("BOT", encoding="utf-8")
+    gui_seed = (
+        project / "foundry" / "templates" / "assets"
+        / "gui_action_decider_seed")
+    gui_seed.mkdir(parents=True)
+    (gui_seed / "gui_action_decider.py").write_text(
+        "def plan_actions(context):\n    return []\n",
+        encoding="utf-8",
+    )
+    patterns = project / "foundry" / "templates" / "patterns"
+    patterns.mkdir(parents=True)
+    shutil.copy2(
+        CYBERLOOP_ROOT / "foundry" / "templates" / "patterns"
+        / "bot_gui_escalate_sonnet_1lane.yaml",
+        patterns / "bot_gui_escalate_sonnet_1lane.yaml",
+    )
 
 
 def _commit_project(project: Path) -> None:
@@ -274,3 +523,23 @@ def _write_score(path: Path) -> None:
             "path": "scores.json",
         }],
     }), encoding="utf-8")
+
+
+def _write_decker_state(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "decker_state.save").write_text("SAVE", encoding="utf-8")
+    (path / "state.json").write_text("{}", encoding="utf-8")
+    (path / "actions.json").write_text("[]", encoding="utf-8")
+
+
+def _write_game_step(path: Path, *, prediction_correct: bool) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "game_step.json").write_text(json.dumps({
+        "schema_version": 1,
+        "prediction_correct": prediction_correct,
+    }), encoding="utf-8")
+
+
+def _write_trace(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "trace.json").write_text("{}", encoding="utf-8")

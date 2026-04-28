@@ -1,0 +1,4 @@
+FROM flywheel-claude:latest
+
+COPY foundry/templates/assets/improve_gui_action_decider_prompt/prompt.md /app/agent/prompt.md
+COPY scripts/validate_gui_action_decider.py /app/validate_gui_action_decider.py

@@ -1,0 +1,58 @@
+name: bot_gui_escalate_sonnet_1lane
+# Requires the workspace-persistent DeckerDesktop block to be warmed first.
+# The desktop and step container communicate on the cyberloop-cua Docker network.
+params:
+  max_actions:
+    type: int
+    default: 50
+  escalation_interval:
+    type: int
+    default: 0
+  seed:
+    type: int
+    default: 1
+  subclass:
+    type: string
+    default: dueling
+  race:
+    type: string
+    default: human
+  background:
+    type: string
+    default: soldier
+  snap_to_prediction_on_mismatch:
+    type: bool
+    default: false
+
+fixtures:
+  bot: foundry/templates/assets/bots/baseline
+  gui_action_decider: foundry/templates/assets/gui_action_decider_seed
+
+do:
+  - run_until:
+      name: play
+      block: StepThroughGui
+      env:
+        SEED: ${params.seed}
+        SUBCLASS: ${params.subclass}
+        RACE: ${params.race}
+        BACKGROUND: ${params.background}
+        SNAP_TO_PREDICTION_ON_MISMATCH: ${params.snap_to_prediction_on_mismatch}
+      continue_on:
+        action_taken:
+          max: ${params.max_actions}
+      stop_on:
+        - game_over
+      fail_on:
+        - desktop_unreachable
+        - bot_error
+      after_every:
+        - reason: action_taken
+          count: 1
+          do:
+            - cohort:
+                members:
+                  - name: escalation_gate
+                    block: GuiEscalationGate
+                    env:
+                      ESCALATION_INTERVAL: ${params.escalation_interval}

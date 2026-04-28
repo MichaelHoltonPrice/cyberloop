@@ -19,6 +19,12 @@ artifacts:
     kind: copy
   - name: cua_trace
     kind: copy
+  - name: game_step
+    kind: copy
+  - name: gui_action_decider
+    kind: copy
+  - name: escalation_request
+    kind: copy
 
 blocks:
   - Train
@@ -27,3 +33,6 @@ blocks:
   - ImproveBot
   - DeckerDesktop
   - CuaPlayAgent
+  - StepThroughGui
+  - GuiEscalationGate
+  - ImproveGuiActionDecider

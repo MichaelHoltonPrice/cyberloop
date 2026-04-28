@@ -1,0 +1,84 @@
+# Executes one bot-selected semantic Decker action through the GUI.
+name: StepThroughGui
+runner: container
+image: cyberloop-gui-step:latest
+docker_args:
+  - --network=cyberloop-cua
+env:
+  DESKTOP_URL: http://decker-desktop:8080
+  SUBCLASS: dueling
+  RACE: human
+  BACKGROUND: soldier
+  SEED: "1"
+  POST_ACTION_WAIT_MS: "800"
+  SNAP_TO_PREDICTION_ON_MISMATCH: "false"
+state: none
+inputs:
+  - name: bot
+    container_path: /input/bot
+  - name: gui_action_decider
+    container_path: /input/gui_action_decider
+  - name: decker_state
+    container_path: /input/decker_state
+    optional: true
+outputs:
+  action_taken:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: game_step
+      container_path: /output/game_step
+      sequence:
+        name: decker_gui_game
+        scope: enclosing_lane
+        role: game_step
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: gui_step_trace
+        scope: enclosing_lane
+        role: gui_step_trace
+  game_over:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: game_step
+      container_path: /output/game_step
+      sequence:
+        name: decker_gui_game
+        scope: enclosing_lane
+        role: game_step
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: gui_step_trace
+        scope: enclosing_lane
+        role: gui_step_trace
+  desktop_unreachable:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: game_step
+      container_path: /output/game_step
+      sequence:
+        name: decker_gui_game
+        scope: enclosing_lane
+        role: game_step
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: gui_step_trace
+        scope: enclosing_lane
+        role: gui_step_trace
+  bot_error:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: game_step
+      container_path: /output/game_step
+      sequence:
+        name: decker_gui_game
+        scope: enclosing_lane
+        role: game_step
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: gui_step_trace
+        scope: enclosing_lane
+        role: gui_step_trace

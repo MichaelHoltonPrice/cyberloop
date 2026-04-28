@@ -1,0 +1,11 @@
+# Lightweight policy block for GUI action decider escalation.
+#
+# Build from the cyberloop root after cyberloop-gui-step:
+#   docker build -f docker/Dockerfile.gui-escalation-gate -t cyberloop-gui-escalation-gate:latest .
+
+FROM python:3.12-slim
+
+COPY scripts/gui_escalation_gate.py /app/scripts/gui_escalation_gate.py
+
+WORKDIR /app/scripts
+ENTRYPOINT ["python", "gui_escalation_gate.py"]
