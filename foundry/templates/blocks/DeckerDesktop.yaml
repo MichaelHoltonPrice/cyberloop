@@ -1,0 +1,21 @@
+# Workspace-persistent desktop service for the Decker GUI.
+#
+# This block is a long-lived target container. Controller blocks talk to its
+# DESKTOP_API_PORT over the cyberloop-cua Docker network. Its Flywheel
+# persistent /execute endpoint is intentionally a no-op normal execution.
+name: DeckerDesktop
+runner: container
+lifecycle: workspace_persistent
+image: cyberloop-decker-desktop:latest
+docker_args:
+  - --restart=unless-stopped
+  - --network=cyberloop-cua
+  - --network-alias=decker-desktop
+env:
+  DESKTOP_API_PORT: "8080"
+  DESKTOP_WIDTH: "1280"
+  DESKTOP_HEIGHT: "720"
+  DESKTOP_DPI: "96"
+state: none
+outputs:
+  normal: []

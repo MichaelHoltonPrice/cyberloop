@@ -1,0 +1,12 @@
+{
+  "tools": [
+    "mcp__cyberloop_cua__screenshot",
+    "mcp__cyberloop_cua__click",
+    "mcp__cyberloop_cua__move",
+    "mcp__cyberloop_cua__type_text",
+    "mcp__cyberloop_cua__key",
+    "mcp__cyberloop_cua__drag",
+    "mcp__cyberloop_cua__wait",
+    "mcp__cyberloop_cua__finish_segment"
+  ]
+}

@@ -18,9 +18,10 @@ mod theme;
 mod tooltip;
 mod tooltip_text;
 
+use decker_gauntlet::{GauntletPhase, GauntletRunner};
 use plugins::{
-    CollectionOverflowPlugin, CombatPlugin, DeckRebuildPlugin, DeckSwapPlugin,
-    GameOverPlugin, GauntletRewardPlugin, InnateChoicePlugin, MainMenuPlugin, RunStartPlugin,
+    CollectionOverflowPlugin, CombatPlugin, DeckRebuildPlugin, DeckSwapPlugin, GameOverPlugin,
+    GauntletRewardPlugin, InnateChoicePlugin, MainMenuPlugin, RunStartPlugin,
 };
 use state::GameState;
 
@@ -97,45 +98,55 @@ fn main() {
         }
     }
 
+    let loaded_runner = load_initial_runner();
+    let loaded_state = loaded_runner.as_ref().map(game_state_for_runner);
+
     app.add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "Short Rest".into(),
-                        mode: window_mode,
-                        resolution: window_resolution,
-                        ..default()
-                    }),
-                    ..default()
-                })
-                .set(AssetPlugin {
-                    file_path: if cfg!(debug_assertions) {
-                        // cargo run executes from target/debug/ — go up to workspace root.
-                        "../../assets".into()
-                    } else {
-                        "assets".into()
-                    },
+        DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "Short Rest".into(),
+                    mode: window_mode,
+                    resolution: window_resolution,
                     ..default()
                 }),
-        )
-        .init_state::<GameState>()
-        .add_plugins(MainMenuPlugin)
-        .add_plugins(RunStartPlugin)
-        .add_plugins(CombatPlugin)
-        .add_plugins(GauntletRewardPlugin)
-        .add_plugins(DeckSwapPlugin)
-        .add_plugins(CollectionOverflowPlugin)
-        .add_plugins(InnateChoicePlugin)
-        .add_plugins(DeckRebuildPlugin)
-        .add_plugins(GameOverPlugin)
-        .add_plugins(decker_card_renderer::CardRendererPlugin)
-        .add_plugins(tooltip::TooltipPlugin)
-        .insert_resource(CliDefaults {
-            race: cli.race,
-            background: cli.background,
-        })
-        .add_systems(Startup, setup)
-        .add_systems(Update, (update_scaling, toggle_fullscreen));
+                ..default()
+            })
+            .set(AssetPlugin {
+                file_path: if cfg!(debug_assertions) {
+                    // cargo run executes from target/debug/ — go up to workspace root.
+                    "../../assets".into()
+                } else {
+                    "assets".into()
+                },
+                ..default()
+            }),
+    )
+    .init_state::<GameState>()
+    .add_plugins(MainMenuPlugin)
+    .add_plugins(RunStartPlugin)
+    .add_plugins(CombatPlugin)
+    .add_plugins(GauntletRewardPlugin)
+    .add_plugins(DeckSwapPlugin)
+    .add_plugins(CollectionOverflowPlugin)
+    .add_plugins(InnateChoicePlugin)
+    .add_plugins(DeckRebuildPlugin)
+    .add_plugins(GameOverPlugin)
+    .add_plugins(decker_card_renderer::CardRendererPlugin)
+    .add_plugins(tooltip::TooltipPlugin)
+    .insert_resource(CliDefaults {
+        race: cli.race,
+        background: cli.background,
+    })
+    .add_systems(Startup, setup)
+    .add_systems(Update, (update_scaling, toggle_fullscreen));
+
+    if let Some(runner) = loaded_runner {
+        app.insert_resource(plugins::RunData { runner });
+    }
+    if let Some(state) = loaded_state {
+        app.insert_state(state);
+    }
 
     // DECKER_STATE_EXPORT: write observation JSON after each state change
     if std::env::var("DECKER_STATE_EXPORT").is_ok() {
@@ -145,11 +156,46 @@ fn main() {
     app.run();
 }
 
+fn load_initial_runner() -> Option<GauntletRunner> {
+    let path = std::env::var("DECKER_STATE_LOAD").ok()?;
+    if path.trim().is_empty() {
+        return None;
+    }
+    let save_path = std::path::Path::new(&path);
+    if !save_path.is_file() {
+        return None;
+    }
+    match std::fs::read_to_string(save_path)
+        .map_err(|e| e.to_string())
+        .and_then(|json| GauntletRunner::from_save(&json))
+    {
+        Ok(runner) => Some(runner),
+        Err(error) => {
+            eprintln!("failed to load DECKER_STATE_LOAD={path}: {error}");
+            std::process::exit(2);
+        }
+    }
+}
+
+fn game_state_for_runner(runner: &GauntletRunner) -> GameState {
+    match runner.phase {
+        GauntletPhase::Combat => GameState::Combat,
+        GauntletPhase::Reward => GameState::GauntletReward,
+        GauntletPhase::CollectionOverflow { .. } => GameState::CollectionOverflow,
+        GauntletPhase::InnateChoice => GameState::InnateChoice,
+        GauntletPhase::DeckSwap { .. } => GameState::DeckSwap,
+        GauntletPhase::DeckRebuild { .. } => GameState::DeckRebuild,
+        GauntletPhase::GameOver => GameState::GameOver,
+    }
+}
+
 /// Writes the current game observation + full save state to files for CUA/bot consumption.
 /// Only active when DECKER_STATE_EXPORT env var is set.
 fn export_game_state(run_data: Option<Res<plugins::RunData>>) {
     let Some(run_data) = run_data else { return };
-    if !run_data.is_changed() { return; }
+    if !run_data.is_changed() {
+        return;
+    }
 
     let export_path = std::env::var("DECKER_STATE_EXPORT")
         .unwrap_or_else(|_| "/tmp/decker_state.json".to_string());
@@ -161,8 +207,12 @@ fn export_game_state(run_data: Option<Res<plugins::RunData>>) {
 
     // Write legal action labels for bot consumption
     let actions_path = format!("{}", export_path.replace(".json", "_actions.json"));
-    let action_labels: Vec<String> = run_data.runner.legal_actions()
-        .iter().map(|a| format!("{:?}", a)).collect();
+    let action_labels: Vec<String> = run_data
+        .runner
+        .legal_actions()
+        .iter()
+        .map(|a| format!("{:?}", a))
+        .collect();
     if let Ok(json) = serde_json::to_string_pretty(&action_labels) {
         let _ = std::fs::write(&actions_path, &json);
     }
@@ -197,10 +247,7 @@ fn compute_scale_and_viewport(window: &Window) -> (f32, Viewport) {
 
     let viewport = Viewport {
         physical_position: UVec2::new(offset_x, offset_y),
-        physical_size: UVec2::new(
-            (vp_w * sf).max(1.0) as u32,
-            (vp_h * sf).max(1.0) as u32,
-        ),
+        physical_size: UVec2::new((vp_w * sf).max(1.0) as u32, (vp_h * sf).max(1.0) as u32),
         ..default()
     };
 

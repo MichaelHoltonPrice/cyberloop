@@ -1,0 +1,46 @@
+# Cyberloop Decker desktop service.
+#
+# Build from the cyberloop root after building flywheel-desktop:
+#   docker build -f docker/Dockerfile.decker-desktop -t cyberloop-decker-desktop:latest .
+#
+# This image derives from the generic Flywheel desktop service battery. It
+# starts the Bevy Decker GUI under Xvfb and exposes the generic desktop API on
+# DESKTOP_API_PORT. The Flywheel persistent-runtime /health and /execute
+# endpoints are served separately on FLYWHEEL_CONTROL_PORT by the base battery.
+
+FROM rust:1-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential clang curl libasound2-dev libudev-dev libwayland-dev \
+    libx11-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+    libxcursor-dev libxi-dev libxinerama-dev libxkbcommon-dev libxrandr-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY Cargo.toml /build/Cargo.toml
+COPY crates/ /build/crates/
+COPY client/Cargo.toml /build/client/Cargo.toml
+COPY client/crates/ /build/client/crates/
+
+WORKDIR /build/client
+RUN cargo build --release -p decker-client
+
+FROM flywheel-desktop:latest
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libasound2 libudev1 libx11-6 libxcb-render0 libxcb-shape0 \
+    libxcb-xfixes0 libxcursor1 libxi6 libxinerama1 libxkbcommon0 \
+    libxrandr2 libwayland-client0 libwayland-cursor0 libwayland-egl1 \
+    libegl1 libgl1 libvulkan1 mesa-vulkan-drivers \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /build/client/target/release/decker /app/decker
+COPY assets/ /app/assets/
+
+ENV DECKER_WINDOW=1280x720
+ENV DECKER_FPS=5
+ENV DECKER_STATE_LOAD=/desktop/shared/decker_state/load.save
+ENV DECKER_STATE_EXPORT=/desktop/shared/decker_state/state.json
+ENV DESKTOP_APP_COMMAND="/app/decker"

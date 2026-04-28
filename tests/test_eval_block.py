@@ -98,12 +98,21 @@ class TestCyberloopTemplate:
             "checkpoint": "copy",
             "score": "copy",
             "bot": "copy",
+            "decker_state": "copy",
+            "cua_trace": "copy",
         }
 
     def test_eval_block_in_template(self, project_setup):
         _, template, _ = project_setup
         block_names = [b.name for b in template.blocks]
-        assert block_names == ["Train", "Eval", "EvalBot", "ImproveBot"]
+        assert block_names == [
+            "Train",
+            "Eval",
+            "EvalBot",
+            "ImproveBot",
+            "DeckerDesktop",
+            "CuaPlayAgent",
+        ]
 
     def test_train_block_in_template(self, project_setup):
         _, template, _ = project_setup
@@ -194,6 +203,134 @@ class TestCyberloopTemplate:
         assert "def request_eval()" in server_text
         assert manifest["tools"] == [improve.env["HANDOFF_TOOLS"]]
 
+    def test_decker_desktop_is_persistent_service_target(self, project_setup):
+        _, template, _ = project_setup
+        desktop = next(b for b in template.blocks if b.name == "DeckerDesktop")
+
+        assert desktop.runner == "container"
+        assert desktop.lifecycle == "workspace_persistent"
+        assert desktop.image == "cyberloop-decker-desktop:latest"
+        assert desktop.state == "none"
+        assert "--restart=unless-stopped" in desktop.docker_args
+        assert "--network=cyberloop-cua" in desktop.docker_args
+        assert "--network-alias=decker-desktop" in desktop.docker_args
+        assert desktop.env["DESKTOP_API_PORT"] == "8080"
+        assert desktop.outputs_for("normal") == []
+
+    def test_cua_play_agent_talks_to_desktop_by_project_convention(
+            self, project_setup):
+        _, template, _ = project_setup
+        agent = next(b for b in template.blocks if b.name == "CuaPlayAgent")
+
+        assert agent.runner == "container"
+        assert agent.lifecycle == "one_shot"
+        assert agent.state == "managed"
+        assert agent.image == "cyberloop-cua-play-agent:latest"
+        assert "--network=cyberloop-cua" in agent.docker_args
+        assert agent.env["DESKTOP_URL"] == "http://decker-desktop:8080"
+        assert agent.env["CUA_SCREENSHOT_DIR"] == (
+            "/output/cua_trace/screenshots")
+        assert agent.env["MCP_SERVERS"] == "cyberloop_cua"
+        assert (
+            agent.env["HANDOFF_TOOLS"]
+            == "mcp__cyberloop_cua__finish_segment"
+        )
+        assert agent.env["HANDOFF_TERMINATION_REASON"] == "segment_complete"
+        assert [slot.name for slot in agent.inputs] == ["decker_state"]
+        assert agent.inputs[0].optional is True
+        assert [slot.name for slot in agent.outputs_for("normal")] == [
+            "decker_state",
+            "cua_trace",
+        ]
+        assert [
+            slot.name for slot in agent.outputs_for("segment_complete")
+        ] == ["decker_state", "cua_trace"]
+        trace = agent.outputs_for("segment_complete")[1]
+        assert trace.sequence is not None
+        assert trace.sequence.name == "cua_trace"
+        assert trace.sequence.scope == "enclosing_lane"
+        assert trace.sequence.role == "segment_trace"
+        assert [
+            slot.name for slot in agent.outputs_for("desktop_unreachable")
+        ] == ["decker_state", "cua_trace"]
+
+    def test_cua_agent_image_bakes_prompt_and_mcp_adapter(self):
+        dockerfile = CYBERLOOP_ROOT / "docker" / "Dockerfile.cua-play-agent"
+        text = dockerfile.read_text(encoding="utf-8")
+
+        assert "FROM flywheel-claude:latest" in text
+        assert (
+            "COPY foundry/templates/assets/cua_play_prompt/prompt.md "
+            "/app/agent/prompt.md"
+        ) in text
+        assert (
+            "COPY foundry/templates/assets/cua_mcp_servers "
+            "/app/agent/mcp_servers"
+        ) in text
+        assert "ENTRYPOINT [\"/app/cua_controller_entrypoint.sh\"]" in text
+
+    def test_decker_desktop_image_derives_from_desktop_battery(self):
+        dockerfile = CYBERLOOP_ROOT / "docker" / "Dockerfile.decker-desktop"
+        text = dockerfile.read_text(encoding="utf-8")
+
+        assert "FROM flywheel-desktop:latest" in text
+        assert "DECKER_WINDOW=1280x720" in text
+        assert "DECKER_FPS=5" in text
+        assert (
+            "DECKER_STATE_LOAD=/desktop/shared/decker_state/load.save"
+            in text
+        )
+        assert (
+            "DECKER_STATE_EXPORT=/desktop/shared/decker_state/state.json"
+            in text
+        )
+        assert "WORKDIR /app" in text
+        assert "COPY assets/ /app/assets/" in text
+
+    def test_decker_desktop_assets_cover_loaded_sprite_paths(self):
+        player_assets = CYBERLOOP_ROOT / "assets" / "sprites" / "player"
+        enemy_assets = CYBERLOOP_ROOT / "assets" / "sprites" / "enemies"
+        encounters = (
+            CYBERLOOP_ROOT
+            / "crates"
+            / "content"
+            / "src"
+            / "encounters.rs"
+        ).read_text(encoding="utf-8")
+
+        assert (player_assets / "fighter.png").is_file()
+        assert (player_assets / "fighter_dead.png").is_file()
+        for enemy_id in sorted(set(
+            part.split('"')[1]
+            for part in encounters.split("enemy_ids: &[")[1:]
+            for part in part.split("]", 1)[0].split(",")
+            if '"' in part
+        )):
+            assert (enemy_assets / f"{enemy_id}.png").is_file()
+            assert (enemy_assets / f"{enemy_id}_dead.png").is_file()
+
+    def test_cua_mcp_manifest_matches_block_handoff(self):
+        server_dir = (
+            CYBERLOOP_ROOT
+            / "foundry"
+            / "templates"
+            / "assets"
+            / "cua_mcp_servers"
+        )
+        manifest = json.loads(
+            (server_dir / "cyberloop_cua_mcp_server.json").read_text(
+                encoding="utf-8")
+        )
+        server_text = (
+            server_dir / "cyberloop_cua_mcp_server.py"
+        ).read_text(encoding="utf-8")
+        registry = BlockRegistry.from_directory(
+            CYBERLOOP_ROOT / "foundry" / "templates" / "blocks")
+        agent = registry.get("CuaPlayAgent")
+
+        assert "def finish_segment()" in server_text
+        assert agent.env["HANDOFF_TOOLS"] in manifest["tools"]
+
 
 
 class TestProductionFilesParseAgainstRegistry:
@@ -211,7 +348,14 @@ class TestProductionFilesParseAgainstRegistry:
 
     def test_block_templates_directory_loads(self):
         registry = BlockRegistry.from_directory(self.BLOCKS_DIR)
-        assert {"Train", "Eval", "EvalBot", "ImproveBot"}.issubset(
+        assert {
+            "Train",
+            "Eval",
+            "EvalBot",
+            "ImproveBot",
+            "DeckerDesktop",
+            "CuaPlayAgent",
+        }.issubset(
             set(registry.names()))
 
     def test_template_loads_and_resolves_eval(self):
@@ -222,8 +366,16 @@ class TestProductionFilesParseAgainstRegistry:
         assert "Train" in [b.name for b in template.blocks]
         assert "EvalBot" in [b.name for b in template.blocks]
         assert "ImproveBot" in [b.name for b in template.blocks]
+        assert "DeckerDesktop" in [b.name for b in template.blocks]
+        assert "CuaPlayAgent" in [b.name for b in template.blocks]
         assert {a.name for a in template.artifacts} == {
-            "game_engine", "checkpoint", "score", "bot"}
+            "game_engine",
+            "checkpoint",
+            "score",
+            "bot",
+            "decker_state",
+            "cua_trace",
+        }
 
     def test_improve_bot_pattern_declares_lanes_and_fixture(self):
         pattern = PatternDeclaration.from_yaml(
@@ -278,8 +430,27 @@ class TestProductionFilesParseAgainstRegistry:
         assert pattern.lanes == ["lane_0"]
         assert pattern.params["model"].default == "claude-sonnet-4-6[1m]"
         assert pattern.params["eval_episodes"].default == 4000
-        assert pattern.params["max_evals"].default == 5
+        assert pattern.params["max_evals"].default == 3
         assert pattern.fixtures["bot"].source == (
             "foundry/templates/assets/bots/baseline")
         assert pattern.steps == []
         assert pattern.patterns["improve_bot_lane"].body
+
+    def test_cua_play_pattern_uses_controller_loop(self):
+        pattern = PatternDeclaration.from_yaml(
+            CYBERLOOP_ROOT
+            / "foundry"
+            / "templates"
+            / "patterns"
+            / "cua_play_sonnet_1lane.yaml"
+        )
+
+        assert pattern.name == "cua_play_sonnet_1lane"
+        assert pattern.params["model"].default == "claude-sonnet-4-6[1m]"
+        assert pattern.params["max_turns"].default == 120
+        assert pattern.params["max_segments"].default == 20
+        assert pattern.lanes == ["default"]
+        assert pattern.steps == []
+        assert pattern.body
+        run_until = pattern.body[0]
+        assert run_until.fail_on == ["desktop_unreachable"]

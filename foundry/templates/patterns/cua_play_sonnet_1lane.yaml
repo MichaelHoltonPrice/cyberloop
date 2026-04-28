@@ -1,0 +1,25 @@
+name: cua_play_sonnet_1lane
+params:
+  model:
+    type: string
+    default: claude-sonnet-4-6[1m]
+  max_turns:
+    type: int
+    default: 120
+  max_segments:
+    type: int
+    default: 20
+do:
+  - run_until:
+      name: play
+      block: CuaPlayAgent
+      env:
+        MODEL: ${params.model}
+        MAX_TURNS: ${params.max_turns}
+      continue_on:
+        segment_complete:
+          max: ${params.max_segments}
+      stop_on:
+        - normal
+      fail_on:
+        - desktop_unreachable

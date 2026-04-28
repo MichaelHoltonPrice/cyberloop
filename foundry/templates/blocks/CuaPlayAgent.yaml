@@ -1,0 +1,67 @@
+# Claude controller for the Decker desktop service.
+#
+# The desktop service owns the virtual display and game process. This block is
+# an ordinary managed Claude controller that drives the desktop over the
+# project Docker network and writes durable state/trace artifacts at exit.
+#
+# This block's cua_trace output appends to an enclosing lane sequence, so run it
+# through a pattern such as cua_play_sonnet_1lane. Ad-hoc `flywheel run block`
+# lacks the lane context required for that sequence append.
+name: CuaPlayAgent
+runner: container
+image: cyberloop-cua-play-agent:latest
+docker_args:
+  - -v
+  - claude-auth:/home/claude/.claude:rw
+  - --network=cyberloop-cua
+env:
+  # Do not enable the Claude battery's NETWORK_ISOLATION for CUA
+  # controllers unless the battery also allows the cyberloop-cua Docker
+  # subnet. The controller MCP server reaches decker-desktop over this
+  # project network, not loopback or host.docker.internal.
+  MAX_TURNS: "120"
+  MODEL: claude-sonnet-4-6[1m]
+  COMPACT_TOKEN_LIMIT: "200000"
+  MCP_SERVER_MOUNT_DIR: /app/agent/mcp_servers
+  MCP_SERVERS: cyberloop_cua
+  # Keep MCP_SERVERS explicit. CUA should expose only the project desktop tools
+  # unless the operator deliberately adds more MCP servers.
+  DESKTOP_URL: http://decker-desktop:8080
+  CUA_SCREENSHOT_DIR: /output/cua_trace/screenshots
+  HANDOFF_TOOLS: mcp__cyberloop_cua__finish_segment
+  HANDOFF_TERMINATION_REASON: segment_complete
+  HANDOFF_PLACEHOLDER_MARKER: Segment complete.
+  HANDOFF_RESULT_LABEL: Segment
+state: managed
+inputs:
+  - name: decker_state
+    container_path: /input/decker_state
+    optional: true
+outputs:
+  segment_complete:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: cua_trace
+        scope: enclosing_lane
+        role: segment_trace
+  normal:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: cua_trace
+        scope: enclosing_lane
+        role: segment_trace
+  desktop_unreachable:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: cua_trace
+        scope: enclosing_lane
+        role: segment_trace

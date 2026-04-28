@@ -15,9 +15,15 @@ artifacts:
     kind: copy
   - name: bot
     kind: copy
+  - name: decker_state
+    kind: copy
+  - name: cua_trace
+    kind: copy
 
 blocks:
   - Train
   - Eval
   - EvalBot
   - ImproveBot
+  - DeckerDesktop
+  - CuaPlayAgent

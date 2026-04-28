@@ -97,8 +97,16 @@ The currently supported surface:
   derived from Flywheel's Claude battery and routes the `request_eval`
   tool to `EvalBot`. It mounts the checked-in Decker engine source as
   the `game_engine` git artifact at `/source`.
+- `foundry/templates/blocks/DeckerDesktop.yaml` runs the Bevy Decker GUI
+  as a workspace-persistent desktop service derived from Flywheel's
+  desktop battery. It exposes screenshot/input APIs on the
+  `cyberloop-cua` Docker network.
+- `foundry/templates/blocks/CuaPlayAgent.yaml` runs a Claude controller
+  that drives `DeckerDesktop` through computer-use tools and writes
+  `decker_state` and `cua_trace` artifacts at segment exit.
 - `foundry/templates/workspaces/cyberloop.yaml` declares the
-  `game_engine`, `checkpoint`, `score`, and `bot` artifact contract.
+  `game_engine`, `checkpoint`, `score`, `bot`, `decker_state`, and
+  `cua_trace` artifact contract.
 - `foundry/templates/patterns/train_eval.yaml` declares the canonical
   Train to Eval pattern.
 - `foundry/templates/patterns/improve_bot.yaml` declares the agent-improves-bot
@@ -116,14 +124,16 @@ The currently supported surface:
 
 ### Container images
 
-Build the Claude battery image, the Cyberloop eval image, then the
-Cyberloop image that bakes in the ImproveBot prompt and request-eval
-MCP tool:
+Build the Claude battery image, the desktop battery image, the Cyberloop
+eval image, then the Cyberloop agent/service images:
 
 ```bash
 docker build -f ../flywheel/batteries/claude/Dockerfile.claude -t flywheel-claude:latest ../flywheel/batteries/claude
+docker build -f ../flywheel/batteries/desktop/Dockerfile.desktop -t flywheel-desktop:latest ../flywheel/batteries/desktop
 docker build -f docker/Dockerfile.eval -t cyberloop-eval:latest .
 docker build -f docker/Dockerfile.improve-bot-agent -t cyberloop-improve-bot-agent:latest .
+docker build -f docker/Dockerfile.decker-desktop -t cyberloop-decker-desktop:latest .
+docker build -f docker/Dockerfile.cua-play-agent -t cyberloop-cua-play-agent:latest .
 ```
 
 ### Claude auth volume
@@ -156,6 +166,20 @@ docker run --rm -v claude-auth:/auth -v "$HOME/.claude:/host-claude:ro" python:3
 The Claude battery entrypoint scrubs the volume at container start so the
 agent sees only the credentials and synthesized settings it needs, not host
 conversation history.
+
+### Computer-use desktop network
+
+The Decker desktop service and CUA controller communicate over a project
+Docker network. Create it once before running the computer-use pattern:
+
+```bash
+docker network create cyberloop-cua
+```
+
+If the network already exists, Docker will report that and no further action is
+needed. `DeckerDesktop` joins this network with the alias
+`decker-desktop`; `CuaPlayAgent` uses `DESKTOP_URL=http://decker-desktop:8080`.
+The desktop API is project convention, not a Flywheel core service concept.
 
 ### Workspaces and pattern runs
 
@@ -215,6 +239,37 @@ environment. The resolved model is stored on the run record:
 ```bash
 python -m flywheel run pattern improve_bot --workspace foundry/workspaces/<workspace> --template cyberloop --param model=claude-opus-4-7
 ```
+
+The one-lane computer-use pattern drives the Decker GUI through the
+workspace-persistent desktop service. Warm the desktop service first; this
+records a no-op `DeckerDesktop` execution and leaves the persistent container
+running:
+
+```bash
+python -m flywheel create workspace --name cua-play-sonnet-1lane --template cyberloop
+python -m flywheel run block DeckerDesktop --workspace foundry/workspaces/cua-play-sonnet-1lane --template cyberloop
+python -m flywheel run pattern cua_play_sonnet_1lane --workspace foundry/workspaces/cua-play-sonnet-1lane --template cyberloop
+```
+
+Each `CuaPlayAgent` segment uploads the previous `decker_state` artifact to
+the desktop service if one exists, resets the GUI from that save, drives the
+desktop, then exports `decker_state` and `cua_trace` artifacts before commit.
+The `cua_trace` artifact is also appended to a lane-scoped `cua_trace`
+sequence, so later blocks can consume the ordered segment history. Screenshots
+captured by the agent live under `cua_trace/screenshots/` inside each segment
+trace artifact. The desktop framebuffer and process are non-durable service
+state; durable state lives in Flywheel artifacts.
+
+Run `CuaPlayAgent` through the pattern, not as an ad hoc block. Its
+`cua_trace` output appends to an enclosing lane sequence, so ad hoc execution
+does not have enough run/lane context. If the controller cannot reach the
+desktop, the block records `desktop_unreachable`, commits diagnostic
+`cua_trace` and `decker_state` artifacts, and the pattern fails intentionally.
+
+The warm-up command records a normal no-op `DeckerDesktop` execution each time
+it starts or health-checks the persistent container. That ledger row is the
+current cost of using the ordinary `flywheel run block` surface instead of a
+separate service-start command.
 
 `train_eval` is the currently supported RL checkpoint pattern:
 

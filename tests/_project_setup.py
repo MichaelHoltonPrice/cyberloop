@@ -43,12 +43,92 @@ artifacts:
     kind: copy
   - name: bot
     kind: copy
+  - name: decker_state
+    kind: copy
+  - name: cua_trace
+    kind: copy
 
 blocks:
   - Train
   - Eval
   - EvalBot
   - ImproveBot
+  - DeckerDesktop
+  - CuaPlayAgent
+"""
+
+DECKER_DESKTOP_BLOCK_YAML = """\
+name: DeckerDesktop
+runner: container
+lifecycle: workspace_persistent
+image: cyberloop-decker-desktop:latest
+docker_args:
+  - --restart=unless-stopped
+  - --network=cyberloop-cua
+  - --network-alias=decker-desktop
+env:
+  DESKTOP_API_PORT: "8080"
+  DESKTOP_WIDTH: "1280"
+  DESKTOP_HEIGHT: "720"
+  DESKTOP_DPI: "96"
+state: none
+outputs:
+  normal: []
+"""
+
+CUA_PLAY_AGENT_BLOCK_YAML = """\
+name: CuaPlayAgent
+runner: container
+image: cyberloop-cua-play-agent:latest
+docker_args:
+  - -v
+  - claude-auth:/home/claude/.claude:rw
+  - --network=cyberloop-cua
+env:
+  MAX_TURNS: "120"
+  MODEL: claude-sonnet-4-6[1m]
+  COMPACT_TOKEN_LIMIT: "200000"
+  MCP_SERVER_MOUNT_DIR: /app/agent/mcp_servers
+  MCP_SERVERS: cyberloop_cua
+  DESKTOP_URL: http://decker-desktop:8080
+  CUA_SCREENSHOT_DIR: /output/cua_trace/screenshots
+  HANDOFF_TOOLS: mcp__cyberloop_cua__finish_segment
+  HANDOFF_TERMINATION_REASON: segment_complete
+  HANDOFF_PLACEHOLDER_MARKER: Segment complete.
+  HANDOFF_RESULT_LABEL: Segment
+state: managed
+inputs:
+  - name: decker_state
+    container_path: /input/decker_state
+    optional: true
+outputs:
+  segment_complete:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: cua_trace
+        scope: enclosing_lane
+        role: segment_trace
+  normal:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: cua_trace
+        scope: enclosing_lane
+        role: segment_trace
+  desktop_unreachable:
+    - name: decker_state
+      container_path: /output/decker_state
+    - name: cua_trace
+      container_path: /output/cua_trace
+      sequence:
+        name: cua_trace
+        scope: enclosing_lane
+        role: segment_trace
 """
 
 TRAIN_BLOCK_YAML = """\
@@ -183,6 +263,8 @@ def build_project(
     (blocks_dir / "Eval.yaml").write_text(EVAL_BLOCK_YAML)
     (blocks_dir / "EvalBot.yaml").write_text(EVAL_BOT_BLOCK_YAML)
     (blocks_dir / "ImproveBot.yaml").write_text(IMPROVE_BOT_BLOCK_YAML)
+    (blocks_dir / "DeckerDesktop.yaml").write_text(DECKER_DESKTOP_BLOCK_YAML)
+    (blocks_dir / "CuaPlayAgent.yaml").write_text(CUA_PLAY_AGENT_BLOCK_YAML)
     registry = BlockRegistry.from_directory(blocks_dir)
 
     workspaces = project / "foundry" / "workspaces"

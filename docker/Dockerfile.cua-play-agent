@@ -1,0 +1,11 @@
+FROM flywheel-claude:latest
+
+COPY foundry/templates/assets/cua_play_prompt/prompt.md /app/agent/prompt.md
+COPY foundry/templates/assets/cua_mcp_servers /app/agent/mcp_servers
+COPY docker/cua_controller_entrypoint.sh /app/cua_controller_entrypoint.sh
+COPY docker/cua_controller_io.py /app/cua_controller_io.py
+
+RUN chmod +x /app/cua_controller_entrypoint.sh
+
+ENTRYPOINT ["/app/cua_controller_entrypoint.sh"]
+
