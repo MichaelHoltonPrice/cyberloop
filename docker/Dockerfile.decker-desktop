@@ -31,7 +31,7 @@ FROM flywheel-desktop:latest
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 libudev1 libx11-6 libxcb-render0 libxcb-shape0 \
     libxcb-xfixes0 libxcursor1 libxi6 libxinerama1 libxkbcommon0 \
-    libxrandr2 libwayland-client0 libwayland-cursor0 libwayland-egl1 \
+    libxkbcommon-x11-0 libxrandr2 libwayland-client0 libwayland-cursor0 libwayland-egl1 \
     libegl1 libgl1 libvulkan1 mesa-vulkan-drivers \
     && rm -rf /var/lib/apt/lists/*
 
