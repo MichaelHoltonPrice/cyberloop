@@ -1,5 +1,5 @@
 name: train_eval
-steps:
+do:
   - name: train
     cohort:
       min_successes: all

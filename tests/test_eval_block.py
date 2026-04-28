@@ -457,7 +457,7 @@ class TestProductionFilesParseAgainstRegistry:
         assert pattern.params["max_evals"].default == 5
         assert pattern.fixtures["bot"].source == (
             "foundry/templates/assets/bots/baseline")
-        assert pattern.steps == []
+        assert pattern.body
         assert "improve_bot_lane" in pattern.patterns
         lane_pattern = pattern.patterns["improve_bot_lane"]
         assert lane_pattern.params["max_evals"].type == "int"
@@ -479,7 +479,7 @@ class TestProductionFilesParseAgainstRegistry:
         assert pattern.params["max_evals"].default == 5
         assert pattern.fixtures["bot"].source == (
             "foundry/templates/assets/bots/baseline")
-        assert pattern.steps == []
+        assert pattern.body
         assert pattern.patterns["improve_bot_lane"].body
 
     def test_improve_bot_sonnet_1lane_pattern_declares_one_lane(self):
@@ -498,7 +498,7 @@ class TestProductionFilesParseAgainstRegistry:
         assert pattern.params["max_evals"].default == 3
         assert pattern.fixtures["bot"].source == (
             "foundry/templates/assets/bots/baseline")
-        assert pattern.steps == []
+        assert pattern.body
         assert pattern.patterns["improve_bot_lane"].body
 
     def test_cua_play_pattern_uses_controller_loop(self):
@@ -515,7 +515,6 @@ class TestProductionFilesParseAgainstRegistry:
         assert pattern.params["max_turns"].default == 120
         assert pattern.params["max_segments"].default == 20
         assert pattern.lanes == ["default"]
-        assert pattern.steps == []
         assert pattern.body
         run_until = pattern.body[0]
         assert run_until.fail_on == ["desktop_unreachable"]

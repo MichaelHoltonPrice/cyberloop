@@ -24,9 +24,9 @@ def test_train_eval_pattern_file_parses():
         / "patterns" / "train_eval.yaml")
 
     assert pattern.name == "train_eval"
-    assert [step.name for step in pattern.steps] == ["train", "eval"]
-    assert pattern.steps[1].cohort.members[0].inputs["checkpoint"]
-    assert pattern.steps[1].cohort.members[0].args == [
+    assert [step.name for step in pattern.body] == ["train", "eval"]
+    assert pattern.body[1].cohort.members[0].inputs["checkpoint"]
+    assert pattern.body[1].cohort.members[0].args == [
         "--episodes", "4000", "--backend", "numpy",
     ]
 
@@ -40,13 +40,13 @@ def test_improve_bot_patterns_use_lane_local_loop_grammar():
     sonnet = PatternDeclaration.from_yaml(
         pattern_dir / "improve_bot_sonnet_2lane.yaml")
 
-    assert full.steps == []
+    assert full.body
     assert full.lanes == ["lane_0", "lane_1", "lane_2"]
     assert full.patterns["improve_bot_lane"].body
-    assert sonnet_1lane.steps == []
+    assert sonnet_1lane.body
     assert sonnet_1lane.lanes == ["lane_0"]
     assert sonnet_1lane.params["max_evals"].default == 3
-    assert sonnet.steps == []
+    assert sonnet.body
     assert sonnet.lanes == ["lane_0", "lane_1"]
     assert sonnet.params["max_evals"].default == 5
 

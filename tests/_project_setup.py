@@ -322,8 +322,9 @@ inputs:
   - name: checkpoint
     container_path: /input/checkpoint
 outputs:
-  - name: score
-    container_path: /output/score
+  normal:
+    - name: score
+      container_path: /output/score
 """
 
 EVAL_BOT_BLOCK_YAML = """\
